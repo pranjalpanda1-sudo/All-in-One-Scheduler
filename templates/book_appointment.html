@@ -1,0 +1,281 @@
+<!DOCTYPE html>
+<html lang="en" class="scroll-smooth">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Book with {{ business.name }} | steadfast</title>
+    
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Instrument+Serif:ital@0;1&family=Plus+Jakarta+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
+    
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script>
+        tailwind.config = {
+            theme: {
+                extend: {
+                    fontFamily: {
+                        sans: ['"Plus Jakarta Sans"', 'sans-serif'],
+                        serif: ['"Instrument Serif"', 'serif'],
+                    },
+                    colors: {
+                        forest: {
+                            800: '#1e3329',
+                            900: '#1a382b',
+                        },
+                        sage: {
+                            50: '#f8faf7',
+                            100: '#edf2ed',
+                            200: '#dbe5dc',
+                            300: '#c2d4c4',
+                            700: '#526e5d',
+                        },
+                        cream: '#f9f9f6',
+                    }
+                }
+            }
+        }
+    </script>
+    <style>
+        .dot-pattern {
+            background-image: radial-gradient(#d1dad2 1px, transparent 1px);
+            background-size: 24px 24px;
+        }
+    </style>
+</head>
+<body class="bg-cream text-[#2b332e] font-sans antialiased min-h-screen dot-pattern flex flex-col justify-between">
+
+    <!-- Top Navigation -->
+    <header class="sticky top-0 z-50 bg-cream/90 backdrop-blur-md border-b border-sage-200/60">
+        <div class="max-w-7xl mx-auto px-6 h-20 flex items-center justify-between">
+            <a href="/" class="flex items-center gap-3">
+                <div class="w-8 h-8 rounded-lg bg-forest-900 flex items-center justify-center text-white font-semibold text-base shadow-sm">
+                    S
+                </div>
+                <span class="text-lg font-bold text-forest-900 tracking-tight">steadfast</span>
+            </a>
+            
+            <div class="flex items-center gap-4">
+                <a href="/businesses" class="text-sm font-semibold text-forest-900 hover:opacity-80 transition">
+                    ← Back to Directory
+                </a>
+                {% if user %}
+                <a href="/dashboard" class="text-sm font-semibold text-forest-900 hover:opacity-80 transition hidden sm:inline">
+                    My Bookings
+                </a>
+                <a href="/logout" class="text-xs font-semibold text-gray-500 hover:text-red-600 transition">
+                    Sign out
+                </a>
+                {% else %}
+                <a href="/login" class="text-sm font-semibold text-forest-900 hover:opacity-80 transition">
+                    Log in
+                </a>
+                {% endif %}
+            </div>
+        </div>
+    </header>
+
+    <!-- Main Content -->
+    <main class="flex-grow max-w-5xl mx-auto px-6 py-10 w-full">
+        
+        <!-- Business Header Hero -->
+        <div class="bg-white p-8 md:p-10 rounded-[32px] border border-sage-200/80 shadow-xl shadow-forest-900/5 mb-8">
+            <div class="flex flex-col md:flex-row md:items-center justify-between gap-6">
+                <div>
+                    <div class="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-sage-100 text-forest-800 text-xs font-semibold uppercase tracking-wider mb-2">
+                        <span>🏢</span> {{ business.address }}
+                    </div>
+                    <h1 class="text-3xl md:text-4xl font-serif text-forest-900 mb-2">{{ business.name }}</h1>
+                    <p class="text-gray-600 text-sm max-w-2xl leading-relaxed">
+                        {{ business.description or 'Book your appointment online with instant confirmation and automated calendar sync.' }}
+                    </p>
+                </div>
+                
+                <div class="bg-sage-50 p-4 rounded-2xl border border-sage-200/60 flex md:flex-col gap-4 text-xs text-gray-600 min-w-[200px]">
+                    <div>
+                        <span class="text-[10px] uppercase font-bold text-sage-700 block">Slot Interval</span>
+                        <strong class="text-forest-900 text-sm">{{ business.appointment_interval }} Minutes</strong>
+                    </div>
+                    <div>
+                        <span class="text-[10px] uppercase font-bold text-sage-700 block">Business Hours</span>
+                        <strong class="text-forest-900 text-sm">{{ business.opening_time }} - {{ business.closing_time }}</strong>
+                    </div>
+                    <div>
+                        <span class="text-[10px] uppercase font-bold text-sage-700 block">Slot Capacity</span>
+                        <strong class="text-forest-900 text-sm">{{ business.max_bookings_per_slot }} per slot</strong>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        {% with messages = get_flashed_messages(with_categories=true) %}
+            {% if messages %}
+                <div class="mb-8 space-y-2">
+                    {% for category, message in messages %}
+                        <div class="p-3.5 rounded-xl text-xs font-medium {{ 'bg-red-50 text-red-700 border border-red-200' if category == 'error' else 'bg-emerald-50 text-emerald-800 border border-emerald-200' }}">
+                            {{ message }}
+                        </div>
+                    {% endfor %}
+                </div>
+            {% endif %}
+        {% endwith %}
+
+        <!-- Booking Form & Slot Selector -->
+        <div class="bg-white p-8 md:p-12 rounded-[36px] border border-sage-200/80 shadow-2xl shadow-forest-900/5">
+            
+            <form id="booking-form" method="POST" action="/businesses/{{ business.id }}/book" class="space-y-8">
+                
+                <!-- Step 1: Date & Staff Selection -->
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-6 pb-6 border-b border-sage-100">
+                    <div>
+                        <label class="block text-xs font-bold text-forest-900 uppercase tracking-wider mb-2">
+                            1. Select Date *
+                        </label>
+                        <input type="date" id="date-picker" name="booking_date" value="{{ selected_date }}" 
+                               min="{{ min_date }}" required
+                               onchange="reloadSlots()"
+                               class="w-full px-4 py-3 rounded-xl border border-sage-200 text-sm focus:outline-none focus:border-forest-900 bg-sage-50/50 font-medium">
+                        <span class="text-[11px] text-gray-500 mt-1 block">Choose any day during normal operating hours</span>
+                    </div>
+
+                    {% if business.allow_employee_selection and employees %}
+                    <div>
+                        <label class="block text-xs font-bold text-forest-900 uppercase tracking-wider mb-2">
+                            2. Choose Staff Member (Optional)
+                        </label>
+                        <select id="employee-picker" name="employee_id" onchange="reloadSlots()" 
+                                class="w-full px-4 py-3 rounded-xl border border-sage-200 text-sm focus:outline-none focus:border-forest-900 bg-sage-50/50 font-medium">
+                            <option value="">Any Available Staff</option>
+                            {% for emp in employees %}
+                            <option value="{{ emp.id }}" {{ 'selected' if selected_employee_id == emp.id else '' }}>
+                                {{ emp.name }} ({{ emp.email }})
+                            </option>
+                            {% endfor %}
+                        </select>
+                        <span class="text-[11px] text-gray-500 mt-1 block">Pick a preferred employee or let us assign anyone available</span>
+                    </div>
+                    {% else %}
+                    <div class="flex items-center text-xs text-gray-500 bg-sage-50 p-4 rounded-xl border border-sage-200/60">
+                        <span>Staff will be assigned automatically based on real-time availability.</span>
+                    </div>
+                    {% endif %}
+                </div>
+
+                <!-- Step 2: Available Time Slots -->
+                <div>
+                    <div class="flex items-center justify-between mb-3">
+                        <label class="block text-xs font-bold text-forest-900 uppercase tracking-wider">
+                            3. Pick an Available Slot *
+                        </label>
+                        <span class="text-[11px] text-emerald-700 bg-emerald-50 px-2.5 py-0.5 rounded-full font-semibold border border-emerald-200">
+                            Strict Concurrency Protection Active
+                        </span>
+                    </div>
+
+                    {% if slots %}
+                        <div class="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-3">
+                            {% for slot in slots %}
+                                {% if slot.available %}
+                                    <label class="relative flex flex-col items-center justify-center p-3.5 rounded-2xl border-2 border-sage-200 cursor-pointer hover:border-forest-900 hover:bg-sage-50 transition group">
+                                        <input type="radio" name="start_time" value="{{ slot.start_iso }}" required
+                                               class="sr-only peer">
+                                        <div class="peer-checked:bg-forest-900 peer-checked:text-white rounded-xl w-full h-full p-2 text-center transition flex flex-col items-center">
+                                            <span class="text-sm font-bold text-forest-900 group-hover:text-forest-900 peer-checked:text-white block">
+                                                {{ slot.display_time }}
+                                            </span>
+                                            <span class="text-[10px] text-emerald-600 peer-checked:text-emerald-200 mt-0.5 font-semibold">
+                                                {{ slot.remaining_capacity }} open
+                                            </span>
+                                        </div>
+                                    </label>
+                                {% else %}
+                                    <div class="flex flex-col items-center justify-center p-3.5 rounded-2xl border border-dashed border-gray-200 bg-gray-50 text-gray-400 cursor-not-allowed">
+                                        <span class="text-sm font-semibold line-through">{{ slot.display_time }}</span>
+                                        <span class="text-[10px] uppercase font-bold text-gray-400 mt-0.5">Booked</span>
+                                    </div>
+                                {% endif %}
+                            {% endfor %}
+                        </div>
+                    {% else %}
+                        <div class="p-6 text-center bg-sage-50 rounded-2xl border border-sage-200 text-xs text-gray-500">
+                            No slots available for this date. Please choose another date or different staff member.
+                        </div>
+                    {% endif %}
+                </div>
+
+                <!-- Step 3: Customer Information -->
+                <div class="pt-6 border-t border-sage-100 space-y-4">
+                    <h3 class="text-xs font-bold text-forest-900 uppercase tracking-wider">
+                        4. Customer Information
+                    </h3>
+
+                    <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                        <div>
+                            <label class="block text-xs font-semibold text-gray-700 mb-1">Your Full Name *</label>
+                            <input type="text" name="customer_name" required value="{{ user.email.split('@')[0] if user else '' }}"
+                                   placeholder="e.g. Alex Morgan"
+                                   class="w-full px-4 py-3 rounded-xl border border-sage-200 text-sm focus:outline-none focus:border-forest-900 bg-sage-50/50 font-medium">
+                        </div>
+
+                        <div>
+                            <label class="block text-xs font-semibold text-gray-700 mb-1">Your Email Address (For Confirmation & Calendar Sync) *</label>
+                            <input type="email" name="customer_email" required value="{{ user.email if user else '' }}"
+                                   placeholder="alex@example.com"
+                                   class="w-full px-4 py-3 rounded-xl border border-sage-200 text-sm focus:outline-none focus:border-forest-900 bg-sage-50/50 font-medium">
+                        </div>
+                    </div>
+
+                    <div>
+                        <label class="block text-xs font-semibold text-gray-700 mb-1">Special Notes / Requests</label>
+                        <textarea name="notes" rows="2" placeholder="Any specific requirements or topics you'd like to address..."
+                                  class="w-full px-4 py-3 rounded-xl border border-sage-200 text-sm focus:outline-none focus:border-forest-900 bg-sage-50/50"></textarea>
+                    </div>
+                </div>
+
+                <!-- Confirmation & Notice -->
+                <div class="bg-forest-900/5 p-4 rounded-2xl border border-forest-900/10 flex items-start gap-3">
+                    <span class="text-lg">🔒</span>
+                    <p class="text-xs text-gray-600 leading-relaxed">
+                        <strong class="text-forest-900 block font-semibold">Instant Guarantee:</strong>
+                        Our database locking guarantees that as soon as you confirm, this slot is locked to prevent any other user from double-booking. You will also receive an automated email confirmation and Google Calendar sync invitation.
+                    </p>
+                </div>
+
+                <div class="pt-2">
+                    <button type="submit" class="w-full py-4 rounded-2xl bg-forest-900 text-white font-semibold hover:bg-forest-800 transition shadow-lg shadow-forest-900/10 text-sm flex items-center justify-center gap-2">
+                        Confirm & Book Slot <span>→</span>
+                    </button>
+                </div>
+
+            </form>
+
+        </div>
+
+    </main>
+
+    <!-- Footer -->
+    <footer class="bg-cream border-t border-sage-200 py-8">
+        <div class="max-w-7xl mx-auto px-6 flex items-center justify-between text-sm text-gray-500">
+            <p>&copy; 2026 Steadfast Multi-Tenant Platform. All rights reserved.</p>
+            <a href="/" class="hover:text-forest-900 transition">Back to Home</a>
+        </div>
+    </footer>
+
+    <script>
+        function reloadSlots() {
+            const dateVal = document.getElementById('date-picker').value;
+            const empPicker = document.getElementById('employee-picker');
+            const empVal = empPicker ? empPicker.value : '';
+            
+            const url = new URL(window.location.href);
+            url.searchParams.set('date', dateVal);
+            if (empVal) {
+                url.searchParams.set('employee_id', empVal);
+            } else {
+                url.searchParams.delete('employee_id');
+            }
+            window.location.href = url.toString();
+        }
+    </script>
+</body>
+</html>

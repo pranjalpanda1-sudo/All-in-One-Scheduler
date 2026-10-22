@@ -1,0 +1,19 @@
+# Python artifacts
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+
+# Virtual environments
+venv/
+env/
+.venv/
+
+# Environment variables
+.env
+.env.*
+!.env.example
+
+# Local credentials and large downloaded artifacts
+primal-turbine-511822-g0-32f8746abb9b.json
+Antigravity-x64.exe

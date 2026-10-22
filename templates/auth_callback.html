@@ -1,0 +1,63 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Authenticating... | steadfast</title>
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+    <script>
+        const sbUrl = "{{ supabase_url }}";
+        const sbKey = "{{ supabase_key }}";
+        const supabaseClient = window.supabase.createClient(sbUrl, sbKey);
+
+        window.addEventListener('DOMContentLoaded', async () => {
+            try {
+                const urlParams = new URLSearchParams(window.location.search);
+                const hashParams = new URLSearchParams(window.location.hash.substring(1));
+
+                const errorMsg = urlParams.get('error_description') || hashParams.get('error_description') || urlParams.get('error');
+                if (errorMsg) {
+                    console.error('OAuth callback error:', errorMsg);
+                    window.location.href = '/login';
+                    return;
+                }
+
+                const code = urlParams.get('code');
+                if (code) {
+                    await supabaseClient.auth.exchangeCodeForSession(code);
+                }
+
+                const { data: { session }, error } = await supabaseClient.auth.getSession();
+                if (error) throw error;
+
+                if (session && session.user) {
+                    const response = await fetch('/auth/session', {
+                        method: 'POST',
+                        headers: {
+                            'Content-Type': 'application/json'
+                        },
+                        body: JSON.stringify({
+                            email: session.user.email,
+                            id: session.user.id
+                        })
+                    });
+                    if (response.ok) {
+                        const resData = await response.json();
+                        window.location.href = resData.redirect_url || '/select-role';
+                        return;
+                    }
+                }
+                window.location.href = '/login';
+            } catch (err) {
+                console.error('Auth callback error:', err);
+                window.location.href = '/login';
+            }
+        });
+    </script>
+</head>
+<body class="bg-[#f9f9f6] flex items-center justify-center min-h-screen font-sans">
+    <div class="text-center">
+        <div class="w-8 h-8 rounded-lg bg-[#1a382b] flex items-center justify-center text-white font-semibold text-base mx-auto mb-4 animate-spin">S</div>
+        <p class="text-gray-600 text-sm">Completing Google sign in & setting up session...</p>
+    </div>
+</body>
+</html>

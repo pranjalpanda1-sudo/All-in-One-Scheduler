@@ -1,0 +1,28 @@
+ARCHITECTURE OVERVIEW:
+This is a multi-tenant business creation and appointment-booking platform with strict concurrency protection, Google Calendar, and email integration. The project is hosted on Vercel using serverless functions for the Python backend.
+
+CONSTRAINTS & RULES FOR AI GENERATION:
+1. Backend: The entire backend logic MUST be centralized in a single Python file (`api/index.py`). We are using Flask as the framework.
+2. Frontend: We are using a multi-page architecture. Each distinct view MUST have its own dedicated HTML file located inside the `templates/` directory.
+3. Hosting: The project uses Vercel. Do not alter `vercel.json` without explicit instruction.
+4. APIs: The project relies on Supabase for database management and auth, with automated Google Calendar (.ics + direct links) and SMTP email confirmation.
+
+DIRECTORY STRUCTURE:
+/
+├── api/
+│   └── index.py            # Centralized monolithic Flask backend with multi-tenant RBAC, concurrency control, and calendar/email sync
+├── templates/
+│   ├── index.html          # Public landing page and marketing overview
+│   ├── login.html          # Authentication (Sign up, Sign in, and Google OAuth)
+│   ├── auth_callback.html  # OAuth redirection and token session handshake
+│   ├── role_selection.html # Post-login role selection (Customer vs Business Admin)
+│   ├── create_business.html# Business registration & interval configuration
+│   ├── businesses.html     # Business directory & search (Customer view)
+│   ├── book_appointment.html # Business booking landing page with dynamic slot picker
+│   ├── dashboard.html      # Customer Dashboard (My Bookings, Google Calendar sync, .ics download, cancellation)
+│   └── admin_dashboard.html# Business Admin Dashboard (Settings, slot capacity, staff management, appointments)
+├── supabase_schema.sql     # Database migration script: tables, unique indexes, and atomic booking stored procedure
+├── requirements.txt        # Python dependencies
+├── structure.txt           # Architectural documentation
+├── vercel.json             # Vercel deployment configuration
+└── .env                    # Environment variables (Supabase, Flask, SMTP, Google keys)

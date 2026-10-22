@@ -1,0 +1,187 @@
+<!DOCTYPE html>
+<html lang="en" class="scroll-smooth">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Select Your Path | steadfast</title>
+    
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Instrument+Serif:ital@0;1&family=Plus+Jakarta+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
+    
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script>
+        tailwind.config = {
+            theme: {
+                extend: {
+                    fontFamily: {
+                        sans: ['"Plus Jakarta Sans"', 'sans-serif'],
+                        serif: ['"Instrument Serif"', 'serif'],
+                    },
+                    colors: {
+                        forest: {
+                            800: '#1e3329',
+                            900: '#1a382b',
+                        },
+                        sage: {
+                            50: '#f8faf7',
+                            100: '#edf2ed',
+                            200: '#dbe5dc',
+                            300: '#c2d4c4',
+                            700: '#526e5d',
+                        },
+                        cream: '#f9f9f6',
+                    }
+                }
+            }
+        }
+    </script>
+    <style>
+        .dot-pattern {
+            background-image: radial-gradient(#d1dad2 1px, transparent 1px);
+            background-size: 24px 24px;
+        }
+    </style>
+</head>
+<body class="bg-cream text-[#2b332e] font-sans antialiased min-h-screen dot-pattern flex flex-col justify-between">
+
+    <!-- Top Navigation -->
+    <header class="sticky top-0 z-50 bg-cream/90 backdrop-blur-md border-b border-sage-200/60">
+        <div class="max-w-7xl mx-auto px-6 h-20 flex items-center justify-between">
+            <a href="/" class="flex items-center gap-3">
+                <div class="w-8 h-8 rounded-lg bg-forest-900 flex items-center justify-center text-white font-semibold text-base shadow-sm">
+                    S
+                </div>
+                <span class="text-lg font-bold text-forest-900 tracking-tight">steadfast</span>
+            </a>
+            
+            <div class="flex items-center gap-4">
+                {% if user %}
+                <span class="text-xs font-medium text-gray-600 hidden sm:inline">Signed in as <strong class="text-forest-900">{{ user.email }}</strong></span>
+                {% endif %}
+                <a href="/logout" class="text-sm font-semibold text-gray-500 hover:text-red-600 transition">
+                    Sign out
+                </a>
+            </div>
+        </div>
+    </header>
+
+    <!-- Main Content -->
+    <main class="flex-grow flex items-center justify-center px-6 py-14">
+        <div class="max-w-4xl w-full">
+            
+            <div class="text-center mb-12">
+                <div class="inline-flex items-center gap-2 px-3.5 py-1.5 rounded-full bg-sage-100 text-forest-800 text-xs font-semibold tracking-wider uppercase mb-4 border border-sage-200">
+                    <span class="w-2 h-2 rounded-full bg-forest-900"></span>
+                    Account Setup
+                </div>
+                <h1 class="text-4xl md:text-5xl font-serif text-forest-900 mb-3">How would you like to continue?</h1>
+                <p class="text-gray-600 text-base max-w-lg mx-auto">
+                    Choose whether you are booking appointments with local service providers or managing your own business calendar and team.
+                </p>
+            </div>
+
+            {% with messages = get_flashed_messages(with_categories=true) %}
+                {% if messages %}
+                    <div class="mb-8 max-w-lg mx-auto space-y-2">
+                        {% for category, message in messages %}
+                            <div class="p-3.5 rounded-xl text-xs font-medium {{ 'bg-red-50 text-red-700 border border-red-200' if category == 'error' else 'bg-emerald-50 text-emerald-800 border border-emerald-200' }}">
+                                {{ message }}
+                            </div>
+                        {% endfor %}
+                    </div>
+                {% endif %}
+            {% endwith %}
+
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-8">
+                
+                <!-- Option 1: Customer / User -->
+                <form method="POST" action="/select-role" class="h-full">
+                    <input type="hidden" name="role" value="CUSTOMER">
+                    <div class="bg-white rounded-[32px] p-8 md:p-10 border border-sage-200/80 shadow-xl shadow-forest-900/5 hover:border-forest-900 transition flex flex-col justify-between h-full group relative overflow-hidden">
+                        <div class="space-y-4">
+                            <div class="w-14 h-14 rounded-2xl bg-sage-100 text-forest-900 flex items-center justify-center text-2xl group-hover:bg-forest-900 group-hover:text-white transition duration-300">
+                                📅
+                            </div>
+                            <div>
+                                <span class="text-xs font-bold text-sage-700 tracking-wider uppercase">For Clients & Customers</span>
+                                <h2 class="text-2xl font-serif text-forest-900 mt-1">Continue as User / Customer</h2>
+                            </div>
+                            <p class="text-gray-600 text-sm leading-relaxed">
+                                Explore registered businesses, browse available time slots, select your favorite staff member, and effortlessly manage your upcoming bookings.
+                            </p>
+                            <ul class="text-xs text-forest-900/80 space-y-2 pt-2">
+                                <li class="flex items-center gap-2">
+                                    <span class="text-emerald-600 font-bold">✓</span> Search & book local services
+                                </li>
+                                <li class="flex items-center gap-2">
+                                    <span class="text-emerald-600 font-bold">✓</span> Sync with Google Calendar automatically
+                                </li>
+                                <li class="flex items-center gap-2">
+                                    <span class="text-emerald-600 font-bold">✓</span> Email confirmations & reminders
+                                </li>
+                            </ul>
+                        </div>
+
+                        <div class="pt-8">
+                            <button type="submit" class="w-full py-4 rounded-2xl bg-sage-100 text-forest-900 font-semibold hover:bg-forest-900 hover:text-white transition shadow-sm text-sm flex items-center justify-center gap-2">
+                                Enter as Customer <span>→</span>
+                            </button>
+                        </div>
+                    </div>
+                </form>
+
+                <!-- Option 2: Business / Admin -->
+                <form method="POST" action="/select-role" class="h-full">
+                    <input type="hidden" name="role" value="BUSINESS_ADMIN">
+                    <div class="bg-white rounded-[32px] p-8 md:p-10 border-2 border-forest-900 shadow-xl shadow-forest-900/10 flex flex-col justify-between h-full group relative overflow-hidden bg-gradient-to-b from-white to-sage-50/40">
+                        <div class="absolute top-4 right-4 bg-forest-900 text-white text-[10px] font-bold px-3 py-1 rounded-full uppercase tracking-wider">
+                            For Owners
+                        </div>
+                        <div class="space-y-4">
+                            <div class="w-14 h-14 rounded-2xl bg-forest-900 text-white flex items-center justify-center text-2xl shadow-md">
+                                🏢
+                            </div>
+                            <div>
+                                <span class="text-xs font-bold text-sage-700 tracking-wider uppercase">For Business Owners</span>
+                                <h2 class="text-2xl font-serif text-forest-900 mt-1">Manage as Business / Admin</h2>
+                            </div>
+                            <p class="text-gray-600 text-sm leading-relaxed">
+                                Register your business, set customized appointment time slots, manage your team/employees, and control booking capacities.
+                            </p>
+                            <ul class="text-xs text-forest-900/80 space-y-2 pt-2">
+                                <li class="flex items-center gap-2">
+                                    <span class="text-emerald-600 font-bold">✓</span> Create custom slot intervals (15, 30, 60m)
+                                </li>
+                                <li class="flex items-center gap-2">
+                                    <span class="text-emerald-600 font-bold">✓</span> Staff assignment & capacity controls
+                                </li>
+                                <li class="flex items-center gap-2">
+                                    <span class="text-emerald-600 font-bold">✓</span> Strict concurrency anti-double booking
+                                </li>
+                            </ul>
+                        </div>
+
+                        <div class="pt-8">
+                            <button type="submit" class="w-full py-4 rounded-2xl bg-forest-900 text-white font-semibold hover:bg-forest-800 transition shadow-md text-sm flex items-center justify-center gap-2">
+                                Set Up & Manage Business <span>→</span>
+                            </button>
+                        </div>
+                    </div>
+                </form>
+
+            </div>
+
+        </div>
+    </main>
+
+    <!-- Footer -->
+    <footer class="bg-cream border-t border-sage-200 py-8">
+        <div class="max-w-7xl mx-auto px-6 flex items-center justify-between text-sm text-gray-500">
+            <p>&copy; 2026 Steadfast Multi-Tenant Platform. All rights reserved.</p>
+            <a href="/" class="hover:text-forest-900 transition">Back to Home</a>
+        </div>
+    </footer>
+
+</body>
+</html>

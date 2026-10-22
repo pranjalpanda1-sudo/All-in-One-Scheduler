@@ -1,0 +1,219 @@
+<!DOCTYPE html>
+<html lang="en" class="scroll-smooth">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Login or Create Account | steadfast</title>
+    
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Instrument+Serif:ital@0;1&family=Plus+Jakarta+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
+    
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script>
+        tailwind.config = {
+            theme: {
+                extend: {
+                    fontFamily: {
+                        sans: ['"Plus Jakarta Sans"', 'sans-serif'],
+                        serif: ['"Instrument Serif"', 'serif'],
+                    },
+                    colors: {
+                        forest: {
+                            800: '#1e3329',
+                            900: '#1a382b',
+                        },
+                        sage: {
+                            50: '#f8faf7',
+                            100: '#edf2ed',
+                            200: '#dbe5dc',
+                            700: '#526e5d',
+                        },
+                        cream: '#f9f9f6',
+                    }
+                }
+            }
+        }
+    </script>
+    <style>
+        .dot-pattern {
+            background-image: radial-gradient(#d1dad2 1px, transparent 1px);
+            background-size: 24px 24px;
+        }
+    </style>
+</head>
+<body class="bg-cream text-[#2b332e] font-sans antialiased min-h-screen dot-pattern flex flex-col justify-between">
+
+    <header class="sticky top-0 z-50 bg-cream/90 backdrop-blur-md border-b border-sage-200/60">
+        <div class="max-w-7xl mx-auto px-6 h-20 flex items-center justify-between">
+            <a href="/" class="flex items-center gap-3">
+                <div class="w-8 h-8 rounded-lg bg-forest-900 flex items-center justify-center text-white font-semibold text-base shadow-sm">
+                    S
+                </div>
+                <span class="text-lg font-bold text-forest-900 tracking-tight">steadfast</span>
+            </a>
+            <div class="flex items-center gap-4">
+                <a href="/businesses" class="text-xs font-semibold text-forest-900 hover:opacity-80 transition">
+                    Browse Businesses
+                </a>
+                <a href="/" class="text-sm font-semibold text-gray-500 hover:text-forest-900 transition">
+                    ← Back to Home
+                </a>
+            </div>
+        </div>
+    </header>
+
+    <main class="flex-grow flex items-center justify-center px-6 py-12">
+        <div class="bg-white p-8 md:p-12 rounded-[36px] shadow-2xl shadow-forest-900/5 max-w-md w-full border border-sage-200/80 relative">
+            
+            <div class="text-center mb-8">
+                <h1 class="text-3xl md:text-4xl font-serif text-forest-900 mb-2">Welcome to steadfast</h1>
+                <p class="text-gray-600 text-sm">Access your bookings or set up your business profile</p>
+            </div>
+
+            {% with messages = get_flashed_messages(with_categories=true) %}
+                {% if messages %}
+                    <div class="mb-6 space-y-2">
+                        {% for category, message in messages %}
+                            <div class="p-3 rounded-xl text-xs font-medium {{ 'bg-red-50 text-red-700 border border-red-200' if category == 'error' else 'bg-emerald-50 text-emerald-700 border border-emerald-200' }}">
+                                {{ message }}
+                            </div>
+                        {% endfor %}
+                    </div>
+                {% endif %}
+            {% endwith %}
+
+            <div class="flex rounded-xl bg-sage-100 p-1 mb-6">
+                <button type="button" id="tab-login" onclick="switchTab('login')" class="flex-1 py-2 text-xs font-semibold rounded-lg bg-white text-forest-900 shadow-sm transition">Log In</button>
+                <button type="button" id="tab-signup" onclick="switchTab('signup')" class="flex-1 py-2 text-xs font-semibold rounded-lg text-gray-600 hover:text-forest-900 transition">Create Account</button>
+            </div>
+
+            <form id="auth-form" method="POST" action="/login" class="space-y-4" onsubmit="return validateForm(event)">
+                <input type="hidden" id="action-input" name="action" value="login">
+
+                <div>
+                    <label class="block text-xs font-semibold text-forest-900 uppercase tracking-wider mb-1.5">Email Address</label>
+                    <input type="email" name="email" required class="w-full px-4 py-3 rounded-xl border border-sage-200 text-sm focus:outline-none focus:border-forest-900 bg-sage-50/50" placeholder="you@example.com">
+                </div>
+
+                <div>
+                    <label class="block text-xs font-semibold text-forest-900 uppercase tracking-wider mb-1.5">Password</label>
+                    <input type="password" id="password-input" name="password" required oninput="checkPasswordStrength()" class="w-full px-4 py-3 rounded-xl border border-sage-200 text-sm focus:outline-none focus:border-forest-900 bg-sage-50/50" placeholder="••••••••">
+                    
+                    <div id="password-requirements" class="mt-2.5 space-y-1 text-xs text-gray-500 hidden">
+                        <p class="font-medium text-forest-900 mb-1">Password must include:</p>
+                        <p id="req-length" class="text-red-500">• At least 8 characters</p>
+                        <p id="req-upper" class="text-red-500">• At least one uppercase letter</p>
+                        <p id="req-number" class="text-red-500">• At least one number</p>
+                        <p id="req-special" class="text-red-500">• At least one special character (!@#$%^&*)</p>
+                    </div>
+                </div>
+
+                <button type="submit" id="submit-btn" class="w-full py-3.5 rounded-xl bg-forest-900 text-white font-medium hover:bg-forest-800 transition shadow-md text-sm">
+                    Log In
+                </button>
+            </form>
+
+            <div class="relative my-6">
+                <div class="absolute inset-0 flex items-center"><div class="w-full border-t border-sage-200"></div></div>
+                <div class="relative flex justify-center text-xs uppercase"><span class="bg-white px-3 text-gray-400 font-medium">Or continue with</span></div>
+            </div>
+
+            <a href="/auth/google" class="w-full py-3 rounded-xl border border-sage-200 text-forest-900 font-medium hover:bg-sage-50 transition flex items-center justify-center gap-3 text-sm shadow-sm">
+                <svg class="w-4 h-4" viewBox="0 0 24 24">
+                    <path fill="#4285F4" d="M23.745 12.27c0-.7-.06-1.4-.19-2.07H12v4.51h6.6c-.29 1.52-1.14 2.82-2.4 3.68v3.05h3.88c2.27-2.09 3.66-5.17 3.66-9.17z"/>
+                    <path fill="#34A853" d="M12 24c3.24 0 5.95-1.08 7.93-2.91l-3.88-3.05c-1.08.72-2.45 1.16-4.05 1.16-3.12 0-5.77-2.1-6.72-4.93H1.19v3.15C3.17 21.36 7.23 24 12 24z"/>
+                    <path fill="#FBBC05" d="M5.28 14.27c-.25-.72-.38-1.49-.38-2.27s.13-1.55.38-2.27V6.58H1.19C.43 8.12 0 9.87 0 12s.43 3.88 1.19 5.42l4.09-3.15z"/>
+                    <path fill="#EA4335" d="M12 4.75c1.77 0 3.35.61 4.6 1.8l3.42-3.42C17.95 1.19 15.24 0 12 0 7.23 0 3.17 2.64 1.19 6.58l4.09 3.15c.95-2.83 3.6-4.98 6.72-4.98z"/>
+                </svg>
+                Sign in with Google
+            </a>
+
+        </div>
+    </main>
+
+    <footer class="bg-cream border-t border-sage-200 py-8">
+        <div class="max-w-7xl mx-auto px-6 flex items-center justify-between text-sm text-gray-500">
+            <p>&copy; 2026 Steadfast Multi-Tenant Platform. All rights reserved.</p>
+            <a href="/" class="hover:text-forest-900 transition">Home</a>
+        </div>
+    </footer>
+
+    <script>
+        let currentMode = 'login';
+
+        const reqLabels = {
+            'req-length': 'At least 8 characters',
+            'req-upper': 'At least one uppercase letter',
+            'req-number': 'At least one number',
+            'req-special': 'At least one special character (!@#$%^&*)'
+        };
+
+        function switchTab(mode) {
+            currentMode = mode;
+            const tabLogin = document.getElementById('tab-login');
+            const tabSignup = document.getElementById('tab-signup');
+            const actionInput = document.getElementById('action-input');
+            const submitBtn = document.getElementById('submit-btn');
+            const reqDiv = document.getElementById('password-requirements');
+
+            if (mode === 'login') {
+                tabLogin.className = 'flex-1 py-2 text-xs font-semibold rounded-lg bg-white text-forest-900 shadow-sm transition';
+                tabSignup.className = 'flex-1 py-2 text-xs font-semibold rounded-lg text-gray-600 hover:text-forest-900 transition';
+                actionInput.value = 'login';
+                submitBtn.textContent = 'Log In';
+                reqDiv.classList.add('hidden');
+            } else {
+                tabSignup.className = 'flex-1 py-2 text-xs font-semibold rounded-lg bg-white text-forest-900 shadow-sm transition';
+                tabLogin.className = 'flex-1 py-2 text-xs font-semibold rounded-lg text-gray-600 hover:text-forest-900 transition';
+                actionInput.value = 'signup';
+                submitBtn.textContent = 'Create Account';
+                reqDiv.classList.remove('hidden');
+                checkPasswordStrength();
+            }
+        }
+
+        function checkPasswordStrength() {
+            if (currentMode !== 'signup') return true;
+            const val = document.getElementById('password-input').value;
+            
+            const hasLength = val.length >= 8;
+            const hasUpper = /[A-Z]/.test(val);
+            const hasNumber = /[0-9]/.test(val);
+            const hasSpecial = /[!@#$%^&*(),.?":{}|<>]/.test(val);
+
+            updateReq('req-length', hasLength);
+            updateReq('req-upper', hasUpper);
+            updateReq('req-number', hasNumber);
+            updateReq('req-special', hasSpecial);
+
+            return hasLength && hasUpper && hasNumber && hasSpecial;
+        }
+
+        function updateReq(id, isValid) {
+            const el = document.getElementById(id);
+            if (!el) return;
+            const label = reqLabels[id] || el.textContent.replace(/^[•✓]\s*/, '');
+            if (isValid) {
+                el.className = 'text-emerald-600';
+                el.textContent = '✓ ' + label;
+            } else {
+                el.className = 'text-red-500';
+                el.textContent = '• ' + label;
+            }
+        }
+
+        function validateForm(e) {
+            if (currentMode === 'signup') {
+                const isValid = checkPasswordStrength();
+                if (!isValid) {
+                    if (e) e.preventDefault();
+                    alert('Please ensure your password meets all strength requirements.');
+                    return false;
+                }
+            }
+            return true;
+        }
+    </script>
+</body>
+</html>
