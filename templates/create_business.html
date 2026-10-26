@@ -81,6 +81,22 @@
                 </p>
             </div>
 
+            <!-- AI Conversational Onboarding Callout Banner -->
+            <div class="mb-8 p-5 rounded-2xl bg-gradient-to-r from-forest-900 to-forest-800 text-white shadow-lg flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
+                <div class="space-y-1">
+                    <div class="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full bg-emerald-400 text-forest-900 text-[10px] font-bold uppercase tracking-wider">
+                        <span>✨</span> Recommended
+                    </div>
+                    <h3 class="text-base font-bold">Use AI Voice & Text Onboarding</h3>
+                    <p class="text-xs text-sage-200 max-w-md">
+                        Describe your business naturally by voice or text. Our AI will automatically configure your services, appointment intervals, and personalized customer intake questions.
+                    </p>
+                </div>
+                <a href="/onboarding" class="whitespace-nowrap px-4 py-2.5 rounded-xl bg-amber-300 hover:bg-amber-400 text-forest-900 text-xs font-bold transition shadow-sm flex items-center gap-1.5">
+                    <span>🎙️</span> Start AI Setup →
+                </a>
+            </div>
+
             {% with messages = get_flashed_messages(with_categories=true) %}
                 {% if messages %}
                     <div class="mb-6 space-y-2">

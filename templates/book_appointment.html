@@ -120,10 +120,13 @@
             {% endif %}
         {% endwith %}
 
+        <!-- Client-Side Form Error Alert -->
+        <div id="booking-validation-alert" class="hidden mb-6 p-4 rounded-2xl text-xs font-medium bg-red-50 text-red-700 border border-red-200"></div>
+
         <!-- Booking Form & Slot Selector -->
         <div class="bg-white p-8 md:p-12 rounded-[36px] border border-sage-200/80 shadow-2xl shadow-forest-900/5">
             
-            <form id="booking-form" method="POST" action="/businesses/{{ business.id }}/book" class="space-y-8">
+            <form id="booking-form" method="POST" action="/businesses/{{ business.id }}/book" onsubmit="return validateIntakeForm()" class="space-y-8">
                 
                 <!-- Step 1: Date & Staff Selection -->
                 <div class="grid grid-cols-1 md:grid-cols-2 gap-6 pb-6 border-b border-sage-100">
@@ -162,7 +165,7 @@
                 </div>
 
                 <!-- Step 2: Available Time Slots -->
-                <div>
+                <div class="pb-6 border-b border-sage-100">
                     <div class="flex items-center justify-between mb-3">
                         <label class="block text-xs font-bold text-forest-900 uppercase tracking-wider">
                             3. Pick an Available Slot *
@@ -203,10 +206,166 @@
                     {% endif %}
                 </div>
 
-                <!-- Step 3: Customer Information -->
-                <div class="pt-6 border-t border-sage-100 space-y-4">
+                <!-- Step 3: Service Selection & Dynamic AI Intake Questions -->
+                <div class="pb-6 border-b border-sage-100 space-y-6">
+                    <div class="flex items-center justify-between">
+                        <div>
+                            <h3 class="text-xs font-bold text-forest-900 uppercase tracking-wider">
+                                4. Appointment Details & Intake Questions
+                            </h3>
+                            <p class="text-xs text-gray-500 mt-0.5">
+                                Please answer the following questions to help {{ business.name }} prepare for your visit.
+                            </p>
+                        </div>
+                        <span class="text-[10px] uppercase font-bold text-sage-700 bg-sage-100 px-2.5 py-0.5 rounded-full">
+                            Custom Intake
+                        </span>
+                    </div>
+
+                    <!-- Services list (if configured) -->
+                    {% if services and services | length > 0 %}
+                    <div class="p-4 rounded-2xl bg-sage-50/60 border border-sage-200/80 space-y-3">
+                        <label class="block text-xs font-bold text-forest-900 uppercase tracking-wider">
+                            Choose Service *
+                        </label>
+                        <div class="grid grid-cols-1 sm:grid-cols-2 gap-3" id="service-options-group">
+                            {% for s in services %}
+                            {% set s_name = s.name if s is mapping else s %}
+                            {% set s_desc = s.description if (s is mapping and s.description) else '' %}
+                            <label class="flex items-start gap-3 p-3.5 rounded-xl border border-sage-200 bg-white cursor-pointer hover:border-forest-900 transition">
+                                <input type="radio" name="selected_service" value="{{ s_name }}" required
+                                       onchange="updateIntakeConditionals()"
+                                       class="mt-0.5 text-forest-900 focus:ring-forest-900">
+                                <div class="text-xs">
+                                    <strong class="text-forest-900 block font-semibold">{{ s_name }}</strong>
+                                    {% if s_desc %}
+                                    <span class="text-gray-500 text-[11px]">{{ s_desc }}</span>
+                                    {% endif %}
+                                </div>
+                            </label>
+                            {% endfor %}
+                        </div>
+                    </div>
+                    {% endif %}
+
+                    <!-- Dynamic Question Cards -->
+                    {% if intake_questions and intake_questions | length > 0 %}
+                    <div class="space-y-4" id="intake-questions-container">
+                        {% for q in intake_questions %}
+                        {% set q_id = q.id %}
+                        {% set q_key = q.key or ('q' ~ loop.index) %}
+                        <div class="p-4 sm:p-5 rounded-2xl bg-sage-50/40 border border-sage-200/70 space-y-3 intake-question-card"
+                             id="intake-card-{{ q_key }}"
+                             data-key="{{ q_key }}"
+                             data-id="{{ q_id }}"
+                             data-type="{{ q.question_type }}"
+                             data-required="{{ 'true' if q.is_required else 'false' }}"
+                             {% if q.conditional_logic and q.conditional_logic.depends_on_question_key %}
+                             data-parent-key="{{ q.conditional_logic.depends_on_question_key }}"
+                             data-show-if="{{ q.conditional_logic.show_if_value }}"
+                             {% endif %}>
+                            
+                            <label class="block text-xs font-bold text-forest-900">
+                                <span class="q-number">{{ loop.index }}</span>. {{ q.question_text }}
+                                {% if q.is_required %}<span class="text-red-500">*</span>{% endif %}
+                            </label>
+                            {% if q.help_text %}
+                            <span class="text-[11px] text-gray-500 block -mt-1">{{ q.help_text }}</span>
+                            {% endif %}
+
+                            <!-- Type 1: Single Choice -->
+                            {% if q.question_type == 'single_choice' %}
+                            <div class="space-y-2">
+                                {% for opt in q.options %}
+                                <label class="flex items-center gap-2.5 p-2.5 rounded-xl bg-white border border-sage-200 cursor-pointer text-xs font-medium hover:border-forest-900 transition">
+                                    <input type="radio" name="intake_{{ q_id }}" value="{{ opt }}"
+                                           data-key="{{ q_key }}"
+                                           onchange="updateIntakeConditionals()"
+                                           {{ 'required' if q.is_required else '' }}
+                                           class="text-forest-900 focus:ring-forest-900">
+                                    <span>{{ opt }}</span>
+                                </label>
+                                {% endfor %}
+                            </div>
+
+                            <!-- Type 2: Dropdown -->
+                            {% elif q.question_type == 'dropdown' %}
+                            <select name="intake_{{ q_id }}"
+                                    data-key="{{ q_key }}"
+                                    onchange="updateIntakeConditionals()"
+                                    {{ 'required' if q.is_required else '' }}
+                                    class="w-full px-4 py-2.5 rounded-xl border border-sage-200 text-xs bg-white font-medium focus:outline-none focus:border-forest-900">
+                                <option value="">Select an option...</option>
+                                {% for opt in q.options %}
+                                <option value="{{ opt }}">{{ opt }}</option>
+                                {% endfor %}
+                            </select>
+
+                            <!-- Type 3: Multiple Choice (Checkboxes) -->
+                            {% elif q.question_type == 'multiple_choice' %}
+                            <div class="space-y-2">
+                                {% for opt in q.options %}
+                                <label class="flex items-center gap-2.5 p-2.5 rounded-xl bg-white border border-sage-200 cursor-pointer text-xs font-medium hover:border-forest-900 transition">
+                                    <input type="checkbox" name="intake_{{ q_id }}" value="{{ opt }}"
+                                           data-key="{{ q_key }}"
+                                           onchange="updateIntakeConditionals()"
+                                           class="text-forest-900 rounded focus:ring-forest-900">
+                                    <span>{{ opt }}</span>
+                                </label>
+                                {% endfor %}
+                                <!-- No native "required" here: HTML5 required on a checkbox group
+                                     demands EVERY box checked, not "at least one". validateIntakeForm()
+                                     enforces "at least one" in JS instead. -->
+                            </div>
+
+                            <!-- Type 4: Yes / No -->
+                            {% elif q.question_type == 'yes_no' %}
+                            <div class="flex gap-3">
+                                <label class="flex-1 flex items-center justify-center p-3 rounded-xl bg-white border border-sage-200 cursor-pointer text-xs font-semibold hover:border-forest-900 transition">
+                                    <input type="radio" name="intake_{{ q_id }}" value="Yes"
+                                           data-key="{{ q_key }}"
+                                           onchange="updateIntakeConditionals()"
+                                           {{ 'required' if q.is_required else '' }}
+                                           class="sr-only peer">
+                                    <span class="peer-checked:text-forest-900 peer-checked:font-bold">Yes</span>
+                                </label>
+                                <label class="flex-1 flex items-center justify-center p-3 rounded-xl bg-white border border-sage-200 cursor-pointer text-xs font-semibold hover:border-forest-900 transition">
+                                    <input type="radio" name="intake_{{ q_id }}" value="No"
+                                           data-key="{{ q_key }}"
+                                           onchange="updateIntakeConditionals()"
+                                           {{ 'required' if q.is_required else '' }}
+                                           class="sr-only peer">
+                                    <span class="peer-checked:text-forest-900 peer-checked:font-bold">No</span>
+                                </label>
+                            </div>
+
+                            <!-- Type 5: Long Text -->
+                            {% elif q.question_type == 'long_text' %}
+                            <textarea name="intake_{{ q_id }}" rows="3"
+                                      data-key="{{ q_key }}"
+                                      {{ 'required' if q.is_required else '' }}
+                                      placeholder="Provide details..."
+                                      class="w-full px-4 py-2.5 rounded-xl border border-sage-200 text-xs bg-white focus:outline-none focus:border-forest-900 font-medium"></textarea>
+
+                            <!-- Type 6: Short Text -->
+                            {% else %}
+                            <input type="text" name="intake_{{ q_id }}"
+                                   data-key="{{ q_key }}"
+                                   {{ 'required' if q.is_required else '' }}
+                                   placeholder="Your answer..."
+                                   class="w-full px-4 py-2.5 rounded-xl border border-sage-200 text-xs bg-white focus:outline-none focus:border-forest-900 font-medium">
+                            {% endif %}
+
+                        </div>
+                        {% endfor %}
+                    </div>
+                    {% endif %}
+                </div>
+
+                <!-- Step 4: Customer Information -->
+                <div class="pt-2 space-y-4">
                     <h3 class="text-xs font-bold text-forest-900 uppercase tracking-wider">
-                        4. Customer Information
+                        5. Customer Contact Information
                     </h3>
 
                     <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
@@ -228,7 +387,7 @@
                     <div>
                         <label class="block text-xs font-semibold text-gray-700 mb-1">Special Notes / Requests</label>
                         <textarea name="notes" rows="2" placeholder="Any specific requirements or topics you'd like to address..."
-                                  class="w-full px-4 py-3 rounded-xl border border-sage-200 text-sm focus:outline-none focus:border-forest-900 bg-sage-50/50"></textarea>
+                                  class="w-full px-4 py-3 rounded-xl border border-sage-200 text-sm focus:outline-none focus:border-forest-900 bg-sage-50/50 font-medium"></textarea>
                     </div>
                 </div>
 
@@ -276,6 +435,117 @@
             }
             window.location.href = url.toString();
         }
+
+        // Dynamic Interactive Conditional Evaluation
+        function updateIntakeConditionals() {
+            const cards = document.querySelectorAll('.intake-question-card[data-parent-key]');
+            
+            // Look up service selection if applicable
+            const checkedService = document.querySelector('input[name="selected_service"]:checked');
+            const selectedServiceVal = checkedService ? checkedService.value.toLowerCase().trim() : '';
+
+            cards.forEach(card => {
+                const parentKey = card.dataset.parentKey;
+                const showIfValue = (card.dataset.showIf || '').toLowerCase().trim();
+
+                let parentActualVal = '';
+
+                // If parentKey is 'service' or matches service selection
+                if (parentKey === 'service' || parentKey === 'q1' && selectedServiceVal) {
+                    parentActualVal = selectedServiceVal;
+                }
+
+                // Check inputs within the form matching data-key
+                const parentRadio = document.querySelector(`input[data-key="${parentKey}"]:checked`);
+                if (parentRadio) parentActualVal = parentRadio.value.toLowerCase().trim();
+
+                const parentSelect = document.querySelector(`select[data-key="${parentKey}"]`);
+                if (parentSelect && parentSelect.value) parentActualVal = parentSelect.value.toLowerCase().trim();
+
+                // Evaluate condition
+                const isVisible = showIfValue && (parentActualVal === showIfValue || parentActualVal.includes(showIfValue));
+                card.classList.toggle('hidden', !isVisible);
+
+                // A hidden field left "required" blocks native HTML5 validation
+                // on submit with no visible error, since it can't be focused.
+                // Only force it back on when shown if the question is actually required.
+                const wasRequired = card.dataset.required === 'true';
+                // Checkboxes excluded: native "required" on a checkbox means THAT box
+                // must be checked, not "at least one in the group" - that's enforced by
+                // validateIntakeForm() instead, so checkboxes never get required here.
+                card.querySelectorAll('input:not([type="checkbox"]), select, textarea').forEach(field => {
+                    field.required = isVisible && wasRequired;
+                });
+            });
+
+            renumberVisibleIntakeQuestions();
+        }
+
+        // Numbers only the currently-visible questions 1, 2, 3... in order, instead
+        // of each card's fixed position in the full (including hidden) question list -
+        // otherwise a hidden conditional question leaves a gap (e.g. "1, 4, 5").
+        function renumberVisibleIntakeQuestions() {
+            const visibleCards = document.querySelectorAll('.intake-question-card:not(.hidden)');
+            visibleCards.forEach((card, idx) => {
+                const numberEl = card.querySelector('.q-number');
+                if (numberEl) numberEl.textContent = idx + 1;
+            });
+        }
+
+        // Validation of visible required intake fields
+        function validateIntakeForm() {
+            const alertBox = document.getElementById('booking-validation-alert');
+            alertBox.classList.add('hidden');
+
+            const visibleCards = Array.from(document.querySelectorAll('.intake-question-card:not(.hidden)'));
+            for (const card of visibleCards) {
+                const isReq = card.dataset.required === 'true';
+                if (!isReq) continue;
+
+                const qType = card.dataset.type;
+                const labelText = card.querySelector('label') ? card.querySelector('label').innerText : 'A question';
+
+                if (qType === 'single_choice' || qType === 'yes_no') {
+                    const checked = card.querySelector('input[type="radio"]:checked');
+                    if (!checked) {
+                        showFormError(`Please select an option for: "${labelText}"`);
+                        return false;
+                    }
+                } else if (qType === 'multiple_choice') {
+                    const checkedBoxes = card.querySelectorAll('input[type="checkbox"]:checked');
+                    if (checkedBoxes.length === 0) {
+                        showFormError(`Please select at least one option for: "${labelText}"`);
+                        return false;
+                    }
+                } else if (qType === 'dropdown') {
+                    const select = card.querySelector('select');
+                    if (!select || !select.value) {
+                        showFormError(`Please make a selection for: "${labelText}"`);
+                        return false;
+                    }
+                } else {
+                    const input = card.querySelector('input[type="text"], textarea');
+                    if (!input || !input.value.trim()) {
+                        showFormError(`Please provide an answer for: "${labelText}"`);
+                        input && input.focus();
+                        return false;
+                    }
+                }
+            }
+            return true;
+        }
+
+        function showFormError(msg) {
+            const alertBox = document.getElementById('booking-validation-alert');
+            alertBox.innerText = msg;
+            alertBox.classList.remove('hidden');
+            alertBox.scrollIntoView({ behavior: 'smooth', block: 'center' });
+        }
+
+        // Run condition evaluation on initial load
+        document.addEventListener('DOMContentLoaded', () => {
+            updateIntakeConditionals();
+        });
     </script>
 </body>
 </html>

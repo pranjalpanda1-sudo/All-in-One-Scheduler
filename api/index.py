@@ -106,6 +106,26 @@ if SUPABASE_URL and _server_key:
         logger.warning(f"Supabase initialization error: {e}")
 
 # ====================================================================
+# GROQ AI INTEGRATION (openai/gpt-oss-120b)
+# ====================================================================
+from groq import Groq
+
+GROQ_API_KEY = os.environ.get("GROQ_API_KEY", "")
+GROQ_AI_MODEL = "openai/gpt-oss-120b"
+GROQ_AUDIO_MODEL = "whisper-large-v3"
+
+groq_client: Groq = None
+if GROQ_API_KEY:
+    try:
+        _groq_http = httpx.Client(verify=False) if os.environ.get("SUPABASE_VERIFY_SSL", "true").lower() == "false" else httpx.Client()
+        groq_client = Groq(api_key=GROQ_API_KEY, http_client=_groq_http)
+        logger.info(f"Groq API client initialized successfully with model '{GROQ_AI_MODEL}'.")
+    except Exception as e:
+        logger.warning(f"Groq API client initialization error: {e}")
+else:
+    logger.warning("GROQ_API_KEY not found in environment. AI functions will run in resilient fallback mode.")
+
+# ====================================================================
 # IN-MEMORY RESILIENT DATA STORE (FALLBACK & SEED DATA)
 # Ensures 100% operational functionality before or alongside SQL migrations
 # ====================================================================
@@ -177,6 +197,96 @@ FALLBACK_EMPLOYEES = [
 
 FALLBACK_BOOKINGS = []
 FALLBACK_USER_ROLES = {}
+
+FALLBACK_BUSINESS_PROFILES = [
+    {
+        "id": "bp-11111111-1111-1111-1111-111111111111",
+        "business_id": "11111111-1111-1111-1111-111111111111",
+        "category": "Wellness & Spa",
+        "description": "Holistic therapy, therapeutic massage, and seasonal consultations by licensed professionals.",
+        "services": [
+            {"name": "Therapeutic Massage", "duration_minutes": 60, "requirements": "Client health history"},
+            {"name": "Holistic Therapy", "duration_minutes": 45, "requirements": "Goal consultation"},
+            {"name": "Seasonal Consultation", "duration_minutes": 30, "requirements": "None"}
+        ],
+        "onboarding_status": "COMPLETED",
+        "created_at": datetime.utcnow().isoformat()
+    }
+]
+
+FALLBACK_INTAKE_FORMS = [
+    {
+        "id": "form-1111-1111-1111-111111111111",
+        "business_id": "11111111-1111-1111-1111-111111111111",
+        "title": "Sage Wellness Appointment Intake",
+        "status": "PUBLISHED",
+        "version": 1,
+        "services": [
+            {"name": "Therapeutic Massage", "description": "Full-body relief and muscle tension reduction"},
+            {"name": "Holistic Therapy", "description": "Integrative wellness and stress-release"},
+            {"name": "Seasonal Consultation", "description": "Routine quarterly consultation"}
+        ],
+        "created_at": datetime.utcnow().isoformat(),
+        "updated_at": datetime.utcnow().isoformat()
+    }
+]
+
+FALLBACK_INTAKE_QUESTIONS = [
+    {
+        "id": "q-1111-0001",
+        "form_id": "form-1111-1111-1111-111111111111",
+        "key": "q1",
+        "question_text": "Which wellness service are you booking today?",
+        "question_type": "single_choice",
+        "options": ["Therapeutic Massage", "Holistic Therapy", "Seasonal Consultation"],
+        "is_required": True,
+        "display_order": 0,
+        "conditional_logic": None,
+        "help_text": "Select the primary service for your visit."
+    },
+    {
+        "id": "q-1111-0002",
+        "form_id": "form-1111-1111-1111-111111111111",
+        "key": "q2",
+        "question_text": "What is your preferred pressure level?",
+        "question_type": "dropdown",
+        "options": ["Light / Gentle", "Medium", "Firm / Deep Tissue"],
+        "is_required": False,
+        "display_order": 1,
+        "conditional_logic": {
+            "depends_on_question_key": "q1",
+            "show_if_value": "Therapeutic Massage"
+        },
+        "help_text": "Helps our therapist tailor the pressure."
+    },
+    {
+        "id": "q-1111-0003",
+        "form_id": "form-1111-1111-1111-111111111111",
+        "key": "q3",
+        "question_text": "Do you have any muscle injuries, recent surgeries, or specific focus areas?",
+        "question_type": "short_text",
+        "options": [],
+        "is_required": False,
+        "display_order": 2,
+        "conditional_logic": None,
+        "help_text": "e.g. lower back tension, neck stiffness."
+    },
+    {
+        "id": "q-1111-0004",
+        "form_id": "form-1111-1111-1111-111111111111",
+        "key": "q4",
+        "question_text": "Do you have any sensitivities or allergies to essential oils or scented lotions?",
+        "question_type": "yes_no",
+        "options": ["Yes", "No"],
+        "is_required": True,
+        "display_order": 3,
+        "conditional_logic": None,
+        "help_text": "We offer unscented hypoallergenic organic seed oils."
+    }
+]
+
+FALLBACK_INTAKE_RESPONSES = []
+FALLBACK_AI_SUMMARIES = []
 
 # Seed the demo businesses/employees into Supabase itself (idempotent upsert)
 # so they are real, bookable rows instead of just appearing in listings from
@@ -981,6 +1091,670 @@ def post_login_redirect_for(user_id: str, email: str):
         return redirect(url_for('businesses'))
 
 # ====================================================================
+# AI SERVICES (Groq openai/gpt-oss-120b & whisper-large-v3)
+# ====================================================================
+def _clean_ai_json(content: str) -> dict:
+    """Safely parses JSON responses from openai/gpt-oss-120b, stripping markdown fences or reasoning artifacts."""
+    if not content:
+        return {}
+    cleaned = content.strip()
+    if cleaned.startswith("```"):
+        cleaned = re.sub(r"^```(?:json)?\s*", "", cleaned)
+        cleaned = re.sub(r"\s*```$", "", cleaned)
+    cleaned = cleaned.strip()
+    try:
+        return json.loads(cleaned)
+    except Exception as e:
+        start = cleaned.find("{")
+        end = cleaned.rfind("}")
+        if start != -1 and end != -1 and end > start:
+            try:
+                return json.loads(cleaned[start:end+1])
+            except Exception:
+                pass
+        logger.warning(f"Failed to parse AI JSON response: {e}. Content preview: {cleaned[:150]}")
+        return {}
+
+def ai_transcribe_audio(file_bytes: bytes, filename: str = "recording.webm") -> tuple[bool, str]:
+    """Transcribes audio using Groq Whisper speech-to-text API."""
+    if not groq_client:
+        return False, "Groq AI client is not configured on this server. Check GROQ_API_KEY."
+    try:
+        transcription = groq_client.audio.transcriptions.create(
+            model=GROQ_AUDIO_MODEL,
+            file=(filename, file_bytes),
+            response_format="text"
+        )
+        text = transcription.strip() if isinstance(transcription, str) else getattr(transcription, 'text', '').strip()
+        return True, text
+    except Exception as e:
+        logger.error(f"Groq Whisper transcription failed: {e}")
+        return False, f"Speech transcription error: {str(e)}"
+
+def ai_understand_business(description: str, conversation_history: list = None, previous_answers: list = None) -> tuple[bool, dict, str]:
+    """Extracts structured business information and targeted follow-up questions using openai/gpt-oss-120b."""
+    if not groq_client:
+        fallback_profile = {
+            "business_name": None,
+            "business_category": "General Services",
+            "business_description": description,
+            "services": [{"name": "Standard Consultation", "description": description, "duration_minutes": 30}],
+            "appointment_interval": 30,
+            "follow_up_questions": []
+        }
+        return True, fallback_profile, "Processed in fallback mode (Groq offline)."
+
+    system_prompt = (
+        "You are an expert AI Systems Architect specializing in small-business onboarding.\n"
+        "Analyze the business owner's natural description and extract a structured business profile.\n"
+        "Rules:\n"
+        "1. Never invent prices, appointment durations, employee names, or services that were not described.\n"
+        "2. Extract: business_name (or null), business_category, business_description, services (list with name, description, duration_minutes or null, requirements), recommended appointment_interval (15, 30, 45, or 60).\n"
+        "3. If critical information is missing to set up their appointment intake (e.g. specific employee selection, special requirements), generate 1 to 2 targeted, helpful follow-up questions in 'follow_up_questions'. If enough information is provided, return an empty list [].\n"
+        "4. Return ONLY valid JSON matching this schema:\n"
+        "{\n"
+        '  "business_name": "string or null",\n'
+        '  "business_category": "string",\n'
+        '  "business_description": "string",\n'
+        '  "services": [\n'
+        '    {"name": "...", "description": "...", "duration_minutes": 30, "requirements": "..."}\n'
+        '  ],\n'
+        '  "appointment_interval": 30,\n'
+        '  "follow_up_questions": ["question 1", "question 2"]\n'
+        "}"
+    )
+
+    messages = [{"role": "system", "content": system_prompt}]
+    if conversation_history:
+        for msg in conversation_history:
+            messages.append(msg)
+    
+    prompt_text = f"Owner's Business Description:\n{description}"
+    if previous_answers:
+        prompt_text += f"\n\nFollow-up Answers:\n{json.dumps(previous_answers)}"
+    messages.append({"role": "user", "content": prompt_text})
+
+    try:
+        res = groq_client.chat.completions.create(
+            model=GROQ_AI_MODEL,
+            messages=messages,
+            response_format={"type": "json_object"},
+            temperature=0.2,
+            max_tokens=2048
+        )
+        profile = _clean_ai_json(res.choices[0].message.content)
+        if not profile:
+            return False, {}, "Failed to parse structured profile from AI."
+        return True, profile, "Business analyzed successfully."
+    except Exception as e:
+        logger.error(f"Groq openai/gpt-oss-120b business understanding failed: {e}")
+        return False, {}, f"AI service error: {str(e)}"
+
+def ai_generate_intake_questions(business_profile: dict, custom_instructions: str = None) -> tuple[bool, list, str]:
+    """Generates personalized appointment intake questions with types and conditional logic using openai/gpt-oss-120b."""
+    if not groq_client:
+        default_qs = [
+            {
+                "id": str(uuid.uuid4()),
+                "key": "q1",
+                "question_text": "What service would you like to book?",
+                "question_type": "single_choice",
+                "options": [s.get("name", s) if isinstance(s, dict) else s for s in business_profile.get("services", ["General Consultation"])],
+                "is_required": True,
+                "display_order": 0,
+                "conditional_logic": None,
+                "help_text": "Select your desired appointment service."
+            },
+            {
+                "id": str(uuid.uuid4()),
+                "key": "q2",
+                "question_text": "Do you have any special requests or focus areas?",
+                "question_type": "long_text",
+                "options": [],
+                "is_required": False,
+                "display_order": 1,
+                "conditional_logic": None,
+                "help_text": ""
+            }
+        ]
+        return True, default_qs, "Generated fallback intake questions."
+
+    system_prompt = (
+        "You are a Senior UI/UX Designer and AI Intake Form Architect.\n"
+        "Generate personalized, high-conversion appointment intake questions for this business.\n"
+        "Requirements:\n"
+        "1. Generate 3 to 6 intelligent, relevant questions.\n"
+        "2. Do NOT ask for customer name, email, or date/time (those are handled by the platform's core booking picker).\n"
+        "3. If multiple services exist, the first question (key: 'q1') should be single_choice for the service.\n"
+        "4. Supported question_type values:\n"
+        "   - 'single_choice' (radio buttons, select exactly one)\n"
+        "   - 'dropdown' (select one from menu)\n"
+        "   - 'multiple_choice' (checkboxes, select all that apply)\n"
+        "   - 'short_text' (brief text response)\n"
+        "   - 'long_text' (multi-line response)\n"
+        "   - 'yes_no' (binary question)\n"
+        "5. For choice questions, provide a clear, realistic 'options' array.\n"
+        "6. CONDITIONAL LOGIC: If a question only applies to a specific service or prior answer, set:\n"
+        "   'conditional_logic': {'depends_on_question_key': 'q1', 'show_if_value': 'Service Name'}\n"
+        "   Otherwise set 'conditional_logic': null.\n"
+        "7. Return ONLY valid JSON:\n"
+        "{\n"
+        '  "questions": [\n'
+        '    {\n'
+        '      "key": "q1",\n'
+        '      "question_text": "...",\n'
+        '      "question_type": "single_choice",\n'
+        '      "options": ["Option A", "Option B"],\n'
+        '      "is_required": true,\n'
+        '      "conditional_logic": null,\n'
+        '      "help_text": "..."\n'
+        '    }\n'
+        '  ]\n'
+        "}"
+    )
+
+    user_content = f"Business Profile:\n{json.dumps(business_profile, indent=2)}"
+    if custom_instructions:
+        user_content += f"\n\nOwner's Custom Instructions:\n{custom_instructions}"
+
+    try:
+        res = groq_client.chat.completions.create(
+            model=GROQ_AI_MODEL,
+            messages=[
+                {"role": "system", "content": system_prompt},
+                {"role": "user", "content": user_content}
+            ],
+            response_format={"type": "json_object"},
+            temperature=0.2,
+            max_tokens=2500
+        )
+        data = _clean_ai_json(res.choices[0].message.content)
+        raw_qs = data.get("questions", [])
+        formatted_qs = []
+        for idx, q in enumerate(raw_qs):
+            formatted_qs.append({
+                "id": str(uuid.uuid4()),
+                "key": q.get("key", f"q{idx+1}"),
+                "question_text": q.get("question_text", "Untitled Question"),
+                "question_type": q.get("question_type", "short_text"),
+                "options": q.get("options") or [],
+                "is_required": bool(q.get("is_required", False)),
+                "display_order": idx,
+                "conditional_logic": q.get("conditional_logic"),
+                "help_text": q.get("help_text", "")
+            })
+        return True, formatted_qs, "Intake questions generated successfully."
+    except Exception as e:
+        logger.error(f"Groq openai/gpt-oss-120b question generation failed: {e}")
+        return False, [], f"AI generation error: {str(e)}"
+
+def ai_improve_question(question_data: dict, business_profile: dict, feedback: str = None) -> tuple[bool, dict, str]:
+    """Improves a single intake question using openai/gpt-oss-120b."""
+    if not groq_client:
+        return True, question_data, "No AI client available."
+    system_prompt = (
+        "You are an AI Intake Form Specialist. Improve or reword this appointment question.\n"
+        "Keep it clear, concise, and professional for customers.\n"
+        "Return valid JSON matching the question object with keys: question_text, question_type, options, is_required, help_text."
+    )
+    user_prompt = f"Business: {business_profile.get('name', 'Small Business')}\nQuestion: {json.dumps(question_data)}"
+    if feedback:
+        user_prompt += f"\nFeedback: {feedback}"
+    try:
+        res = groq_client.chat.completions.create(
+            model=GROQ_AI_MODEL,
+            messages=[
+                {"role": "system", "content": system_prompt},
+                {"role": "user", "content": user_prompt}
+            ],
+            response_format={"type": "json_object"},
+            temperature=0.3,
+            max_tokens=800
+        )
+        improved = _clean_ai_json(res.choices[0].message.content)
+        merged = {**question_data, **improved}
+        return True, merged, "Question improved."
+    except Exception as e:
+        logger.error(f"Groq improve question error: {e}")
+        return False, question_data, str(e)
+
+def ai_improve_entire_form(current_questions: list, business_profile: dict, instruction: str) -> tuple[bool, list, str]:
+    """Refines all intake questions according to owner's instructions using openai/gpt-oss-120b."""
+    if not groq_client:
+        return True, current_questions, "AI client unavailable."
+    system_prompt = (
+        "You are an AI Intake Form Architect. Refine the given list of appointment questions according to the owner's instruction.\n"
+        "Maintain supported question types: single_choice, dropdown, multiple_choice, short_text, long_text, yes_no.\n"
+        "Ensure conditional_logic rules remain intact or updated appropriately.\n"
+        "Return valid JSON: {\"questions\": [ ... ]}"
+    )
+    user_content = f"Business Profile:\n{json.dumps(business_profile)}\nCurrent Questions:\n{json.dumps(current_questions)}\nInstruction: {instruction}"
+    try:
+        res = groq_client.chat.completions.create(
+            model=GROQ_AI_MODEL,
+            messages=[
+                {"role": "system", "content": system_prompt},
+                {"role": "user", "content": user_content}
+            ],
+            response_format={"type": "json_object"},
+            temperature=0.3,
+            max_tokens=2500
+        )
+        data = _clean_ai_json(res.choices[0].message.content)
+        raw_qs = data.get("questions", [])
+        formatted = []
+        for idx, q in enumerate(raw_qs):
+            formatted.append({
+                "id": q.get("id") or str(uuid.uuid4()),
+                "key": q.get("key", f"q{idx+1}"),
+                "question_text": q.get("question_text", "Question"),
+                "question_type": q.get("question_type", "short_text"),
+                "options": q.get("options") or [],
+                "is_required": bool(q.get("is_required", False)),
+                "display_order": idx,
+                "conditional_logic": q.get("conditional_logic"),
+                "help_text": q.get("help_text", "")
+            })
+        return True, formatted, "Form improved successfully."
+    except Exception as e:
+        logger.error(f"Groq improve entire form error: {e}")
+        return False, current_questions, str(e)
+
+def ai_summarize_appointment(booking_data: dict, service_name: str, responses: list, customer_notes: str) -> tuple[bool, dict]:
+    """
+    Generates a concise, highly accurate appointment summary using openai/gpt-oss-120b.
+    If AI service is unavailable, provides a clean deterministic fallback summary.
+    """
+    ans_lines = []
+    for r in responses:
+        ans = r.get("answer")
+        if isinstance(ans, list):
+            ans = ", ".join(ans)
+        if ans:
+            ans_lines.append(f"{r.get('question_text')}: {ans}")
+    ans_summary_text = "; ".join(ans_lines)
+    cust_name = booking_data.get("customer_name", "Customer")
+    svc = service_name or "General Appointment"
+
+    fallback_summary = f"{cust_name} booked {svc}."
+    if ans_summary_text:
+        fallback_summary += f" Intake details: {ans_summary_text}."
+    if customer_notes:
+        fallback_summary += f" Special note: {customer_notes}."
+
+    fallback_result = {
+        "summary": fallback_summary,
+        "preparation_notes": f"Verify requirements for {svc} prior to arrival." if svc != "General Appointment" else None
+    }
+
+    if not groq_client:
+        return False, fallback_result
+
+    system_prompt = (
+        "You are an AI Appointment Intake Summarizer.\n"
+        "Analyze the customer's selected service, intake questionnaire responses, and special notes.\n"
+        "Requirements:\n"
+        "1. Produce a concise, useful 1-3 sentence summary that the business owner can scan quickly.\n"
+        "2. Accurately reflect submitted answers. Never invent customer preferences or services.\n"
+        "3. Distinguish customer-provided information from interpretation.\n"
+        "4. If helpful, provide preparation_notes for staff.\n"
+        "5. Return valid JSON:\n"
+        "{\n"
+        '  "summary": "...",\n'
+        '  "preparation_notes": "..."\n'
+        "}"
+    )
+
+    payload = {
+        "customer_name": cust_name,
+        "service": svc,
+        "intake_responses": responses,
+        "customer_notes": customer_notes
+    }
+
+    try:
+        res = groq_client.chat.completions.create(
+            model=GROQ_AI_MODEL,
+            messages=[
+                {"role": "system", "content": system_prompt},
+                {"role": "user", "content": json.dumps(payload)}
+            ],
+            response_format={"type": "json_object"},
+            temperature=0.2,
+            max_tokens=800
+        )
+        parsed = _clean_ai_json(res.choices[0].message.content)
+        if parsed and parsed.get("summary"):
+            return True, parsed
+        return False, fallback_result
+    except Exception as e:
+        logger.warning(f"Groq appointment summary error (falling back to deterministic summary): {e}")
+        return False, fallback_result
+
+# ====================================================================
+# DATABASE & DATA STORE REPOSITORIES FOR CUSTOM INTAKE
+# ====================================================================
+def get_business_profile(business_id: str) -> dict:
+    """Retrieves business profile from Supabase or fallback store."""
+    if not business_id:
+        return {}
+    if supabase:
+        try:
+            res = supabase.table('business_profiles').select('*').eq('business_id', business_id).limit(1).execute()
+            if res.data and len(res.data) > 0:
+                return res.data[0]
+        except Exception as e:
+            logger.warning(f"Supabase get_business_profile error: {e}")
+
+    for bp in FALLBACK_BUSINESS_PROFILES:
+        if bp.get('business_id') == business_id:
+            return bp
+    return {}
+
+def save_business_profile(business_id: str, profile_data: dict) -> dict:
+    """Persists structured business profile to Supabase and fallback store."""
+    record = {
+        "business_id": business_id,
+        "category": profile_data.get("business_category") or profile_data.get("category"),
+        "description": profile_data.get("business_description") or profile_data.get("description"),
+        "services": profile_data.get("services") or [],
+        "requirements": profile_data.get("requirements") or {},
+        "onboarding_status": "COMPLETED",
+        "updated_at": datetime.utcnow().isoformat()
+    }
+    if supabase:
+        try:
+            existing = supabase.table('business_profiles').select('id').eq('business_id', business_id).execute()
+            if existing.data and len(existing.data) > 0:
+                res = supabase.table('business_profiles').update(record).eq('business_id', business_id).execute()
+            else:
+                record["id"] = str(uuid.uuid4())
+                res = supabase.table('business_profiles').insert(record).execute()
+            if res.data:
+                return res.data[0]
+        except Exception as e:
+            logger.warning(f"Supabase save_business_profile error: {e}")
+
+    # Fallback store
+    for idx, bp in enumerate(FALLBACK_BUSINESS_PROFILES):
+        if bp.get('business_id') == business_id:
+            FALLBACK_BUSINESS_PROFILES[idx] = {**bp, **record}
+            return FALLBACK_BUSINESS_PROFILES[idx]
+
+    record["id"] = str(uuid.uuid4())
+    FALLBACK_BUSINESS_PROFILES.append(record)
+    return record
+
+def get_intake_form_by_business(business_id: str, status: str = None) -> tuple[dict, list]:
+    """Retrieves intake form and questions for a business (draft, published, or any)."""
+    if not business_id:
+        return None, []
+
+    # 1. Try Supabase
+    if supabase:
+        try:
+            query = supabase.table('intake_forms').select('*').eq('business_id', business_id)
+            if status:
+                query = query.eq('status', status)
+            query = query.order('version', desc=True).limit(1)
+            form_res = query.execute()
+
+            if form_res.data and len(form_res.data) > 0:
+                form = form_res.data[0]
+                q_res = supabase.table('intake_questions').select('*').eq('form_id', form['id']).order('display_order', desc=False).execute()
+                questions = q_res.data or []
+                return form, questions
+        except Exception as e:
+            logger.warning(f"Supabase get_intake_form_by_business error: {e}")
+
+    # 2. Resilient fallback store
+    matched_forms = [f for f in FALLBACK_INTAKE_FORMS if f.get('business_id') == business_id]
+    if status:
+        matched_forms = [f for f in matched_forms if f.get('status') == status]
+
+    matched_forms.sort(key=lambda x: x.get('version', 1), reverse=True)
+    if matched_forms:
+        target_form = matched_forms[0]
+        questions = [q for q in FALLBACK_INTAKE_QUESTIONS if q.get('form_id') == target_form.get('id')]
+        questions.sort(key=lambda x: x.get('display_order', 0))
+        return target_form, questions
+
+    return None, []
+
+def save_draft_intake_form(business_id: str, form_title: str, questions: list, services: list = None) -> dict:
+    """Saves or updates a DRAFT intake form and replaces its questions."""
+    draft_form, _ = get_intake_form_by_business(business_id, status='DRAFT')
+    pub_form, _ = get_intake_form_by_business(business_id, status='PUBLISHED')
+
+    next_version = (pub_form.get('version', 0) + 1) if pub_form else 1
+    form_id = draft_form.get('id') if draft_form else str(uuid.uuid4())
+
+    form_record = {
+        "id": form_id,
+        "business_id": business_id,
+        "title": form_title or "Appointment Intake Form",
+        "status": "DRAFT",
+        "version": next_version,
+        "services": services or (pub_form.get('services') if pub_form else []),
+        "updated_at": datetime.utcnow().isoformat()
+    }
+
+    if supabase:
+        try:
+            if draft_form:
+                supabase.table('intake_forms').update(form_record).eq('id', form_id).execute()
+            else:
+                form_record["created_at"] = datetime.utcnow().isoformat()
+                supabase.table('intake_forms').insert(form_record).execute()
+
+            # Delete old draft questions and insert new ones
+            supabase.table('intake_questions').delete().eq('form_id', form_id).execute()
+            db_questions = []
+            for idx, q in enumerate(questions):
+                db_questions.append({
+                    "id": str(uuid.uuid4()),
+                    "form_id": form_id,
+                    "question_text": q.get('question_text', 'Question'),
+                    "question_type": q.get('question_type', 'short_text'),
+                    "options": q.get('options') or [],
+                    "is_required": bool(q.get('is_required', False)),
+                    "display_order": idx,
+                    "conditional_logic": q.get('conditional_logic'),
+                    "help_text": q.get('help_text', '')
+                })
+            if db_questions:
+                supabase.table('intake_questions').insert(db_questions).execute()
+            return form_record
+        except Exception as e:
+            logger.warning(f"Supabase save_draft_intake_form error: {e}")
+
+    # Fallback store persistence
+    existing_idx = None
+    for idx, f in enumerate(FALLBACK_INTAKE_FORMS):
+        if f.get('business_id') == business_id and f.get('status') == 'DRAFT':
+            existing_idx = idx
+            break
+
+    if existing_idx is not None:
+        FALLBACK_INTAKE_FORMS[existing_idx] = form_record
+    else:
+        FALLBACK_INTAKE_FORMS.append(form_record)
+
+    # Clean old fallback questions for this form
+    global FALLBACK_INTAKE_QUESTIONS
+    FALLBACK_INTAKE_QUESTIONS = [q for q in FALLBACK_INTAKE_QUESTIONS if q.get('form_id') != form_id]
+
+    for idx, q in enumerate(questions):
+        FALLBACK_INTAKE_QUESTIONS.append({
+            "id": q.get('id') or str(uuid.uuid4()),
+            "form_id": form_id,
+            "key": q.get('key', f"q{idx+1}"),
+            "question_text": q.get('question_text', 'Question'),
+            "question_type": q.get('question_type', 'short_text'),
+            "options": q.get('options') or [],
+            "is_required": bool(q.get('is_required', False)),
+            "display_order": idx,
+            "conditional_logic": q.get('conditional_logic'),
+            "help_text": q.get('help_text', '')
+        })
+
+    return form_record
+
+def publish_intake_form(business_id: str, questions: list = None) -> tuple[bool, str]:
+    """Promotes the DRAFT form to PUBLISHED, archiving any previous published version."""
+    draft_form, draft_qs = get_intake_form_by_business(business_id, status='DRAFT')
+    if not draft_form and not questions:
+        return False, "No draft form found to publish."
+
+    qs_to_publish = questions if questions is not None else draft_qs
+    pub_form, _ = get_intake_form_by_business(business_id, status='PUBLISHED')
+    new_version = (pub_form.get('version', 0) + 1) if pub_form else 1
+
+    new_pub_id = str(uuid.uuid4())
+    form_record = {
+        "id": new_pub_id,
+        "business_id": business_id,
+        "title": draft_form.get('title', 'Appointment Intake Form') if draft_form else "Appointment Intake Form",
+        "status": "PUBLISHED",
+        "version": new_version,
+        "services": draft_form.get('services', []) if draft_form else [],
+        "created_at": datetime.utcnow().isoformat(),
+        "updated_at": datetime.utcnow().isoformat()
+    }
+
+    if supabase:
+        try:
+            # Insert new published form
+            supabase.table('intake_forms').insert(form_record).execute()
+
+            # Insert questions for published form
+            db_questions = []
+            for idx, q in enumerate(qs_to_publish):
+                db_questions.append({
+                    "id": str(uuid.uuid4()),
+                    "form_id": new_pub_id,
+                    "question_text": q.get('question_text', 'Question'),
+                    "question_type": q.get('question_type', 'short_text'),
+                    "options": q.get('options') or [],
+                    "is_required": bool(q.get('is_required', False)),
+                    "display_order": idx,
+                    "conditional_logic": q.get('conditional_logic'),
+                    "help_text": q.get('help_text', '')
+                })
+            if db_questions:
+                supabase.table('intake_questions').insert(db_questions).execute()
+
+            # Delete old draft form to clear pending state
+            if draft_form:
+                supabase.table('intake_forms').delete().eq('id', draft_form['id']).execute()
+            return True, f"Published Version {new_version} successfully!"
+        except Exception as e:
+            logger.warning(f"Supabase publish_intake_form error: {e}")
+
+    # Fallback store
+    FALLBACK_INTAKE_FORMS.append(form_record)
+    for idx, q in enumerate(qs_to_publish):
+        FALLBACK_INTAKE_QUESTIONS.append({
+            "id": str(uuid.uuid4()),
+            "form_id": new_pub_id,
+            "key": q.get('key', f"q{idx+1}"),
+            "question_text": q.get('question_text', 'Question'),
+            "question_type": q.get('question_type', 'short_text'),
+            "options": q.get('options') or [],
+            "is_required": bool(q.get('is_required', False)),
+            "display_order": idx,
+            "conditional_logic": q.get('conditional_logic'),
+            "help_text": q.get('help_text', '')
+        })
+
+    # Clear draft from fallback
+    if draft_form:
+        for idx, f in enumerate(FALLBACK_INTAKE_FORMS):
+            if f.get('id') == draft_form.get('id'):
+                FALLBACK_INTAKE_FORMS.pop(idx)
+                break
+
+    return True, f"Published Version {new_version} successfully!"
+
+def save_appointment_intake_responses(booking_id: str, business_id: str, form_id: str, service_selected: str, responses: list) -> dict:
+    """Persists customer intake responses linked to an appointment."""
+    record = {
+        "id": str(uuid.uuid4()),
+        "booking_id": booking_id,
+        "business_id": business_id,
+        "form_id": form_id,
+        "service_selected": service_selected,
+        "responses": responses,
+        "created_at": datetime.utcnow().isoformat()
+    }
+    if supabase:
+        try:
+            res = supabase.table('appointment_intake_responses').insert(record).execute()
+            if res.data:
+                return res.data[0]
+        except Exception as e:
+            logger.warning(f"Supabase save_intake_responses error: {e}")
+
+    FALLBACK_INTAKE_RESPONSES.append(record)
+    return record
+
+def get_intake_responses_for_booking(booking_id: str) -> dict:
+    """Retrieves customer intake responses for a specific booking."""
+    if not booking_id:
+        return {}
+    if supabase:
+        try:
+            res = supabase.table('appointment_intake_responses').select('*').eq('booking_id', booking_id).limit(1).execute()
+            if res.data and len(res.data) > 0:
+                return res.data[0]
+        except Exception as e:
+            logger.warning(f"Supabase get_intake_responses error: {e}")
+
+    for r in FALLBACK_INTAKE_RESPONSES:
+        if str(r.get('booking_id')) == str(booking_id):
+            return r
+    return {}
+
+def save_ai_appointment_summary(booking_id: str, business_id: str, summary: str, prep_notes: str = None, status: str = 'COMPLETED') -> dict:
+    """Persists Groq AI-generated summary and preparation notes."""
+    record = {
+        "id": str(uuid.uuid4()),
+        "booking_id": booking_id,
+        "business_id": business_id,
+        "summary": summary,
+        "preparation_notes": prep_notes,
+        "status": status,
+        "created_at": datetime.utcnow().isoformat()
+    }
+    if supabase:
+        try:
+            res = supabase.table('ai_appointment_summaries').insert(record).execute()
+            if res.data:
+                return res.data[0]
+        except Exception as e:
+            logger.warning(f"Supabase save_ai_summary error: {e}")
+
+    FALLBACK_AI_SUMMARIES.append(record)
+    return record
+
+def get_ai_appointment_summary(booking_id: str) -> dict:
+    """Retrieves AI-generated appointment summary for an appointment."""
+    if not booking_id:
+        return {}
+    if supabase:
+        try:
+            res = supabase.table('ai_appointment_summaries').select('*').eq('booking_id', booking_id).limit(1).execute()
+            if res.data and len(res.data) > 0:
+                return res.data[0]
+        except Exception as e:
+            logger.warning(f"Supabase get_ai_summary error: {e}")
+
+    for s in FALLBACK_AI_SUMMARIES:
+        if str(s.get('booking_id')) == str(booking_id):
+            return s
+    return {}
+
+# ====================================================================
 # FLASK APPLICATION ROUTES
 # ====================================================================
 @app.route('/')
@@ -1229,7 +2003,9 @@ def book_appointment(business_id):
     Landing booking page for a specific business:
     - Allows date selection and employee selection.
     - Dynamically presents open slots.
+    - Dynamically presents published AI intake questions with dynamic conditional logic.
     - Atomically processes bookings with strict concurrency protection.
+    - Saves customer answers and triggers AI appointment summary generation.
     """
     business = get_business_by_id(business_id)
     if not business:
@@ -1251,6 +2027,10 @@ def book_appointment(business_id):
     except Exception:
         selected_date = today
 
+    # Fetch active published intake form & questions for this business
+    pub_form, intake_questions = get_intake_form_by_business(business_id, status='PUBLISHED')
+    services = pub_form.get('services', []) if pub_form else []
+
     # POST: Process Booking Submission
     if request.method == 'POST':
         start_time_iso = request.form.get('start_time')
@@ -1258,6 +2038,7 @@ def book_appointment(business_id):
         cust_email = request.form.get('customer_email', '').strip()
         emp_id = request.form.get('employee_id', '').strip() or None
         notes = request.form.get('notes', '').strip()
+        selected_service = request.form.get('selected_service', '').strip()
 
         if not start_time_iso or not cust_name or not cust_email:
             flash("Please fill in all required fields and pick a time slot.", "error")
@@ -1290,6 +2071,57 @@ def book_appointment(business_id):
             flash(message, "error")
             return redirect(url_for('book_appointment', business_id=business_id, date=selected_date.isoformat(), employee_id=emp_id or ''))
 
+        booking_id = booking.get('id', str(uuid.uuid4()))
+
+        # Collect intake responses
+        intake_responses = []
+        if intake_questions:
+            for q in intake_questions:
+                q_id = str(q.get('id', ''))
+                if q.get('question_type') == 'multiple_choice':
+                    ans = request.form.getlist(f"intake_{q_id}")
+                else:
+                    ans = request.form.get(f"intake_{q_id}", '').strip()
+                if ans:
+                    intake_responses.append({
+                        "question_id": q_id,
+                        "question_text": q.get('question_text', ''),
+                        "question_type": q.get('question_type', ''),
+                        "answer": ans
+                    })
+
+        # Save responses if present
+        if intake_responses or selected_service:
+            save_appointment_intake_responses(
+                booking_id=booking_id,
+                business_id=business_id,
+                form_id=pub_form.get('id') if pub_form else None,
+                service_selected=selected_service,
+                responses=intake_responses
+            )
+
+        # Generate AI Appointment Summary via openai/gpt-oss-120b
+        ai_success, summary_data = ai_summarize_appointment(
+            booking_data={
+                "booking_id": booking_id,
+                "customer_name": cust_name,
+                "customer_email": cust_email,
+                "start_time": start_time_iso,
+                "notes": notes
+            },
+            service_name=selected_service,
+            responses=intake_responses,
+            customer_notes=notes
+        )
+        if summary_data:
+            save_ai_appointment_summary(
+                booking_id=booking_id,
+                business_id=business_id,
+                summary=summary_data.get('summary', ''),
+                prep_notes=summary_data.get('preparation_notes'),
+                status='COMPLETED' if ai_success else 'FALLBACK'
+            )
+
         # Lookup employee name for email & calendar
         emp_name = "Staff Member"
         if emp_id:
@@ -1297,8 +2129,6 @@ def book_appointment(business_id):
                 if e['id'] == emp_id:
                     emp_name = e['name']
                     break
-
-        booking_id = booking.get('id', str(uuid.uuid4()))
 
         # Trigger automated confirmation email & Google Calendar payload
         send_booking_confirmation_email(
@@ -1338,7 +2168,10 @@ def book_appointment(business_id):
         selected_date=selected_date.isoformat(),
         min_date=today.isoformat(),
         selected_employee_id=selected_employee_id,
-        user=user
+        user=user,
+        intake_form=pub_form,
+        intake_questions=intake_questions,
+        services=services
     )
 
 @app.route('/businesses/<business_id>/slots')
@@ -1363,7 +2196,7 @@ def api_business_slots(business_id):
 # ====================================================================
 @app.route('/admin', methods=['GET', 'POST'])
 def admin_dashboard():
-    """Business Admin Dashboard: Manage business settings, staff, and view bookings."""
+    """Business Admin Dashboard: Manage business settings, staff, view bookings, and inspect AI summaries."""
     if 'user' not in session:
         flash("Please log in to access the Admin Console.", "error")
         return redirect(url_for('login'))
@@ -1397,16 +2230,290 @@ def admin_dashboard():
     employees = get_employees_by_business(business['id'])
     bookings = get_bookings_for_business(business['id'])
 
+    # Attach intake data and AI summary to each booking
+    for b in bookings:
+        b_id = str(b.get('id', ''))
+        b['intake_data'] = get_intake_responses_for_booking(b_id)
+        b['ai_summary'] = get_ai_appointment_summary(b_id)
+
+    # Fetch draft and published intake forms for this business
+    draft_form, draft_qs = get_intake_form_by_business(business['id'], status='DRAFT')
+    pub_form, pub_qs = get_intake_form_by_business(business['id'], status='PUBLISHED')
+
     return render_template(
         'admin_dashboard.html',
         user=user,
         business=business,
         employees=employees,
         bookings=bookings,
+        draft_form=draft_form,
+        draft_questions_count=len(draft_qs),
+        published_form=pub_form,
+        published_questions_count=len(pub_qs),
         google_service_account_email=GOOGLE_SERVICE_ACCOUNT_EMAIL,
         calendar_sync_available=bool(google_calendar_service),
         google_oauth_available=google_oauth_available
     )
+
+# ====================================================================
+# AI ONBOARDING & CUSTOM INTAKE FORM STUDIO ROUTES
+# ====================================================================
+@app.route('/onboarding', methods=['GET', 'POST'])
+def onboarding():
+    """
+    Conversational AI Business Onboarding:
+    - Provides Voice (Option A, preferred via Groq Whisper) and Text (Option B) input.
+    - Guides business owners to naturally describe their business.
+    """
+    if 'user' not in session:
+        flash("Please log in to start AI Onboarding.", "error")
+        return redirect(url_for('login'))
+
+    user = session['user']
+    if user.get('role') != 'BUSINESS_ADMIN':
+        user['role'] = 'BUSINESS_ADMIN'
+        session['user'] = user
+        set_user_role(user['id'], user['email'], 'BUSINESS_ADMIN')
+
+    business = get_business_by_owner(user['id'])
+    return render_template('ai_onboarding.html', user=user, business=business)
+
+@app.route('/api/ai/transcribe', methods=['POST'])
+def api_ai_transcribe():
+    """Server-side endpoint to transcribe audio recordings using Groq Whisper."""
+    if 'audio' not in request.files:
+        return jsonify({"success": False, "error": "No audio file uploaded."}), 400
+
+    audio_file = request.files['audio']
+    if audio_file.filename == '':
+        return jsonify({"success": False, "error": "Empty audio file."}), 400
+
+    try:
+        audio_bytes = audio_file.read()
+        filename = audio_file.filename or "recording.webm"
+        success, transcript = ai_transcribe_audio(audio_bytes, filename)
+        if success:
+            return jsonify({"success": True, "text": transcript}), 200
+        else:
+            return jsonify({"success": False, "error": transcript}), 500
+    except Exception as e:
+        logger.error(f"Audio transcription endpoint error: {e}")
+        return jsonify({"success": False, "error": str(e)}), 500
+
+@app.route('/api/ai/understand', methods=['POST'])
+def api_ai_understand():
+    """
+    Server-side endpoint to analyze business description using openai/gpt-oss-120b.
+    Extracts structured business information and returns targeted follow-up questions if needed.
+    """
+    data = request.get_json() or {}
+    description = data.get('description', '').strip()
+    if not description:
+        return jsonify({"success": False, "error": "Description cannot be empty."}), 400
+
+    success, profile, msg = ai_understand_business(description)
+    if success:
+        return jsonify({
+            "success": True,
+            "profile": profile,
+            "follow_up_questions": profile.get("follow_up_questions", [])
+        }), 200
+    else:
+        return jsonify({"success": False, "error": msg}), 500
+
+@app.route('/admin/intake')
+def admin_intake_studio():
+    """
+    Intake Form Studio:
+    Business owner review, manual editing, AI regeneration, draft saving, and 1-click publishing.
+    """
+    if 'user' not in session or session['user'].get('role') != 'BUSINESS_ADMIN':
+        flash("Business Admin access required.", "error")
+        return redirect(url_for('login'))
+
+    user = session['user']
+    business = get_business_by_owner(user['id'])
+    if not business:
+        flash("Please set up your business first.", "error")
+        return redirect(url_for('create_business'))
+
+    draft_form, draft_qs = get_intake_form_by_business(business['id'], status='DRAFT')
+    pub_form, pub_qs = get_intake_form_by_business(business['id'], status='PUBLISHED')
+
+    # If draft exists, review draft; otherwise default to published or empty list
+    active_questions = draft_qs if draft_form else (pub_qs if pub_form else [])
+
+    return render_template(
+        'intake_studio.html',
+        user=user,
+        business=business,
+        draft_form=draft_form,
+        published_form=pub_form,
+        questions=active_questions
+    )
+
+@app.route('/admin/intake/generate', methods=['POST'])
+def admin_intake_generate():
+    """
+    Generates intelligent appointment questions from structured business profile
+    using openai/gpt-oss-120b and saves them into the business's DRAFT form.
+    """
+    if 'user' not in session or session['user'].get('role') != 'BUSINESS_ADMIN':
+        return jsonify({"success": False, "error": "Unauthorized"}), 401
+
+    user = session['user']
+    business = get_business_by_owner(user['id'])
+    data = request.get_json() or {}
+    profile = data.get('profile') or {}
+    follow_up_answers = data.get('follow_up_answers') or []
+
+    # If the user doesn't have a business record yet, create it from the AI profile!
+    if not business:
+        biz_name = profile.get('business_name') or "My Business"
+        biz_desc = profile.get('business_description') or "Appointment Booking Service"
+        biz_interval = profile.get('appointment_interval') or 30
+        biz_data = {
+            "name": biz_name,
+            "description": biz_desc,
+            "address": "Local Service / Consultations",
+            "appointment_interval": biz_interval,
+            "max_bookings_per_slot": 1,
+            "allow_employee_selection": True,
+            "opening_time": "09:00",
+            "closing_time": "17:00"
+        }
+        business = create_business_record(user['id'], biz_data)
+        user['business_id'] = business['id']
+        session['user'] = user
+        set_user_role(user['id'], user['email'], 'BUSINESS_ADMIN', business['id'])
+        add_employee_record(business['id'], biz_name.split()[0] + " (Owner)", user['email'])
+    else:
+        # Update business profile
+        save_business_profile(business['id'], profile)
+
+    # Incorporate follow-up answers into profile context
+    if follow_up_answers:
+        profile['additional_details'] = follow_up_answers
+
+    success, questions, msg = ai_generate_intake_questions(profile)
+    if not success:
+        return jsonify({"success": False, "error": msg}), 500
+
+    # Save as DRAFT form
+    services = profile.get('services', [])
+    save_draft_intake_form(
+        business_id=business['id'],
+        form_title=f"{business['name']} Custom Intake",
+        questions=questions,
+        services=services
+    )
+
+    return jsonify({"success": True, "questions": questions}), 200
+
+@app.route('/admin/intake/save-draft', methods=['POST'])
+def admin_intake_save_draft():
+    """Saves modified questions into DRAFT without publishing to customers."""
+    if 'user' not in session or session['user'].get('role') != 'BUSINESS_ADMIN':
+        return jsonify({"success": False, "error": "Unauthorized"}), 401
+
+    user = session['user']
+    business = get_business_by_owner(user['id'])
+    if not business:
+        return jsonify({"success": False, "error": "Business not found."}), 404
+
+    data = request.get_json() or {}
+    questions = data.get('questions', [])
+
+    save_draft_intake_form(
+        business_id=business['id'],
+        form_title=f"{business['name']} Custom Intake",
+        questions=questions
+    )
+    return jsonify({"success": True, "message": "Draft saved successfully."}), 200
+
+@app.route('/admin/intake/publish', methods=['POST'])
+def admin_intake_publish():
+    """Approves and publishes the draft intake form to live customers."""
+    if 'user' not in session or session['user'].get('role') != 'BUSINESS_ADMIN':
+        return jsonify({"success": False, "error": "Unauthorized"}), 401
+
+    user = session['user']
+    business = get_business_by_owner(user['id'])
+    if not business:
+        return jsonify({"success": False, "error": "Business not found."}), 404
+
+    data = request.get_json() or {}
+    questions = data.get('questions')
+
+    success, msg = publish_intake_form(business['id'], questions)
+    if success:
+        return jsonify({"success": True, "message": msg}), 200
+    else:
+        return jsonify({"success": False, "error": msg}), 400
+
+@app.route('/admin/intake/improve-question', methods=['POST'])
+def admin_intake_improve_question():
+    """Regenerates or improves a single question using openai/gpt-oss-120b."""
+    if 'user' not in session or session['user'].get('role') != 'BUSINESS_ADMIN':
+        return jsonify({"success": False, "error": "Unauthorized"}), 401
+
+    user = session['user']
+    business = get_business_by_owner(user['id'])
+    data = request.get_json() or {}
+    q = data.get('question')
+    feedback = data.get('feedback')
+
+    if not q:
+        return jsonify({"success": False, "error": "No question provided."}), 400
+
+    profile = get_business_profile(business['id']) if business else {}
+    success, improved, msg = ai_improve_question(q, profile, feedback)
+    if success:
+        return jsonify({"success": True, "improved_question": improved}), 200
+    else:
+        return jsonify({"success": False, "error": msg}), 500
+
+@app.route('/admin/intake/improve-form', methods=['POST'])
+def admin_intake_improve_form():
+    """Improves the entire questionnaire based on owner instructions using openai/gpt-oss-120b."""
+    if 'user' not in session or session['user'].get('role') != 'BUSINESS_ADMIN':
+        return jsonify({"success": False, "error": "Unauthorized"}), 401
+
+    user = session['user']
+    business = get_business_by_owner(user['id'])
+    data = request.get_json() or {}
+    questions = data.get('questions', [])
+    instruction = data.get('instruction', '')
+
+    if not instruction:
+        return jsonify({"success": False, "error": "Please provide improvement instructions."}), 400
+
+    profile = get_business_profile(business['id']) if business else {}
+    success, improved_qs, msg = ai_improve_entire_form(questions, profile, instruction)
+    if success:
+        # Also persist to draft
+        if business:
+            save_draft_intake_form(business['id'], f"{business['name']} Custom Intake", improved_qs)
+        return jsonify({"success": True, "questions": improved_qs}), 200
+    else:
+        return jsonify({"success": False, "error": msg}), 500
+
+@app.route('/api/businesses/<business_id>/intake')
+def api_business_intake(business_id):
+    """Public read-only API returning published intake form and questions for a business."""
+    pub_form, questions = get_intake_form_by_business(business_id, status='PUBLISHED')
+    if not pub_form:
+        return jsonify({"success": False, "form": None, "questions": []}), 200
+    return jsonify({
+        "success": True,
+        "form": {
+            "id": pub_form.get('id'),
+            "version": pub_form.get('version'),
+            "title": pub_form.get('title'),
+            "services": pub_form.get('services', [])
+        },
+        "questions": questions
+    }), 200
 
 @app.route('/admin/calendar/connect')
 def admin_calendar_connect():

@@ -1,0 +1,567 @@
+<!DOCTYPE html>
+<html lang="en" class="scroll-smooth">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>AI Business Onboarding | steadfast</title>
+
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Instrument+Serif:ital@0;1&family=Plus+Jakarta+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
+
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script>
+        tailwind.config = {
+            theme: {
+                extend: {
+                    fontFamily: {
+                        sans: ['"Plus Jakarta Sans"', 'sans-serif'],
+                        serif: ['"Instrument Serif"', 'serif'],
+                    },
+                    colors: {
+                        forest: {
+                            800: '#1e3329',
+                            900: '#1a382b',
+                        },
+                        sage: {
+                            50: '#f8faf7',
+                            100: '#edf2ed',
+                            200: '#dbe5dc',
+                            300: '#c2d4c4',
+                            700: '#526e5d',
+                        },
+                        cream: '#f9f9f6',
+                    }
+                }
+            }
+        }
+    </script>
+    <style>
+        .dot-pattern {
+            background-image: radial-gradient(#d1dad2 1px, transparent 1px);
+            background-size: 24px 24px;
+        }
+        @keyframes pulse-ring {
+            0% { transform: scale(0.95); opacity: 0.8; }
+            50% { transform: scale(1.15); opacity: 0.3; }
+            100% { transform: scale(0.95); opacity: 0.8; }
+        }
+        .pulse-recording {
+            animation: pulse-ring 2s infinite ease-in-out;
+        }
+    </style>
+</head>
+<body class="bg-cream text-[#2b332e] font-sans antialiased min-h-screen dot-pattern flex flex-col justify-between">
+
+    <!-- Top Navigation -->
+    <header class="sticky top-0 z-50 bg-cream/90 backdrop-blur-md border-b border-sage-200/60">
+        <div class="max-w-7xl mx-auto px-6 h-20 flex items-center justify-between">
+            <a href="/" class="flex items-center gap-3">
+                <div class="w-8 h-8 rounded-lg bg-forest-900 flex items-center justify-center text-white font-semibold text-base shadow-sm">
+                    S
+                </div>
+                <span class="text-lg font-bold text-forest-900 tracking-tight">steadfast</span>
+                <span class="text-[10px] font-bold text-forest-900 bg-emerald-200 px-2.5 py-0.5 rounded-full uppercase tracking-wider flex items-center gap-1">
+                    <span>✨</span> AI Onboarding
+                </span>
+            </a>
+
+            <div class="flex items-center gap-4 text-xs">
+                {% if business %}
+                <a href="/admin" class="font-semibold text-forest-900 hover:opacity-80 transition">
+                    ← Back to Admin Console
+                </a>
+                {% else %}
+                <a href="/create-business" class="text-gray-500 hover:text-forest-900 transition">
+                    Manual Setup
+                </a>
+                {% endif %}
+                <a href="/logout" class="text-red-500 hover:text-red-700 transition">
+                    Log out
+                </a>
+            </div>
+        </div>
+    </header>
+
+    <!-- Main Content -->
+    <main class="flex-grow max-w-4xl mx-auto px-6 py-10 w-full">
+        
+        <!-- Welcome Hero -->
+        <div class="bg-white p-8 md:p-10 rounded-[32px] border border-sage-200/80 shadow-xl shadow-forest-900/5 mb-8 text-center md:text-left relative overflow-hidden">
+            <div class="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-sage-100 text-forest-800 text-xs font-semibold uppercase tracking-wider mb-3">
+                <span>🤖</span> Powered by Groq • openai/gpt-oss-120b
+            </div>
+            <h1 class="text-3xl md:text-4xl font-serif text-forest-900 mb-2">Tell us about your business.</h1>
+            <p class="text-gray-600 text-sm md:text-base max-w-2xl leading-relaxed">
+                Just tell us what you do, what services you offer, and what you typically need to know before an appointment. Our AI will help create the perfect booking experience for your customers.
+            </p>
+        </div>
+
+        <!-- Notification Banner -->
+        <div id="status-alert" class="hidden mb-6 p-4 rounded-2xl text-xs font-medium"></div>
+
+        <!-- STEP 1: Conversational Input (Voice or Text) -->
+        <div id="step-input" class="bg-white p-8 md:p-10 rounded-[36px] border border-sage-200/80 shadow-2xl shadow-forest-900/5 space-y-8">
+            
+            <!-- Input Mode Selector -->
+            <div class="flex rounded-2xl bg-sage-50 p-1.5 border border-sage-200/80 max-w-md mx-auto">
+                <button type="button" id="tab-voice" onclick="switchInputMode('voice')"
+                        class="flex-1 py-2.5 text-xs font-semibold rounded-xl bg-forest-900 text-white transition flex items-center justify-center gap-2 shadow-sm">
+                    <span>🎙️</span> Voice Input (Preferred)
+                </button>
+                <button type="button" id="tab-text" onclick="switchInputMode('text')"
+                        class="flex-1 py-2.5 text-xs font-semibold rounded-xl text-gray-600 hover:text-forest-900 transition flex items-center justify-center gap-2">
+                    <span>⌨️</span> Text Input
+                </button>
+            </div>
+
+            <!-- OPTION A: VOICE INPUT -->
+            <div id="voice-container" class="space-y-6 text-center">
+                <div class="py-6 flex flex-col items-center justify-center">
+                    
+                    <!-- Microphone Record Button -->
+                    <div class="relative flex items-center justify-center mb-4">
+                        <div id="mic-pulse" class="absolute w-28 h-28 rounded-full bg-red-400 opacity-0 pointer-events-none"></div>
+                        <button type="button" id="mic-btn" onclick="toggleRecording()"
+                                class="w-20 h-20 rounded-full bg-forest-900 hover:bg-forest-800 text-white flex items-center justify-center text-3xl shadow-lg shadow-forest-900/20 transition transform active:scale-95 cursor-pointer z-10">
+                            <span id="mic-icon">🎙️</span>
+                        </button>
+                    </div>
+
+                    <!-- Voice Status Label & Timer -->
+                    <div id="voice-status-text" class="text-sm font-semibold text-forest-900">
+                        Tap microphone and speak naturally
+                    </div>
+                    <div id="voice-timer" class="text-xs font-mono text-gray-400 mt-1 hidden">
+                        00:00
+                    </div>
+
+                    <!-- Voice Action Buttons (Visible while or after recording) -->
+                    <div id="voice-controls" class="flex items-center gap-3 mt-4 hidden">
+                        <button type="button" onclick="cancelRecording()" 
+                                class="px-4 py-2 rounded-xl border border-gray-300 text-gray-600 hover:bg-gray-50 text-xs font-semibold transition">
+                            ✕ Cancel
+                        </button>
+                        <button type="button" id="stop-btn" onclick="stopRecording()" 
+                                class="px-5 py-2 rounded-xl bg-red-600 hover:bg-red-700 text-white text-xs font-semibold shadow-sm transition">
+                            ⏹ Stop & Transcribe
+                        </button>
+                    </div>
+
+                    <!-- Example Quote -->
+                    <div class="mt-6 p-4 rounded-2xl bg-sage-50/70 border border-sage-200/60 max-w-lg text-left text-xs text-gray-600">
+                        <strong class="text-forest-900 block font-semibold mb-1">💡 What you can say:</strong>
+                        <p class="italic">"I run a barbershop called Apex Cuts. We do regular haircuts, beard trims, fades, and hair coloring. Sometimes customers want a specific barber, and for hair coloring we need to know their current hair color and what color they want. Haircuts take 30 minutes, but coloring can take two hours."</p>
+                    </div>
+                </div>
+
+                <!-- Transcription Review Box (Appears after audio is transcribed) -->
+                <div id="transcription-review" class="hidden text-left space-y-3 pt-6 border-t border-sage-100">
+                    <div class="flex items-center justify-between">
+                        <label class="text-xs font-bold text-forest-900 uppercase tracking-wider flex items-center gap-2">
+                            <span>📝</span> Speech Transcription (Review & Edit)
+                        </label>
+                        <button type="button" onclick="retryRecording()" class="text-xs text-sage-700 hover:text-forest-900 font-medium">
+                            🔄 Record Again
+                        </button>
+                    </div>
+                    <textarea id="voice-transcript-text" rows="4" 
+                              placeholder="Transcribed speech will appear here for your review..."
+                              class="w-full px-4 py-3 rounded-2xl border border-sage-200 text-sm focus:outline-none focus:border-forest-900 bg-white font-medium leading-relaxed"></textarea>
+                    <span class="text-[11px] text-gray-400 block">You can freely edit any words before sending to AI.</span>
+                </div>
+            </div>
+
+            <!-- OPTION B: TEXT INPUT -->
+            <div id="text-container" class="space-y-4 hidden">
+                <div>
+                    <label class="block text-xs font-bold text-forest-900 uppercase tracking-wider mb-2">
+                        Describe your business in your own words *
+                    </label>
+                    <textarea id="business-description-input" rows="6"
+                              placeholder="e.g. I run a private tutoring center. We tutor middle and high school students in math, science, and English. We need to know what grade the student is in, what subject they need help with, and what specific topics they find challenging..."
+                              class="w-full px-4 py-3.5 rounded-2xl border border-sage-200 text-sm focus:outline-none focus:border-forest-900 bg-sage-50/40 font-medium leading-relaxed"></textarea>
+                </div>
+
+                <!-- Quick Inspiration Pills -->
+                <div>
+                    <span class="text-[11px] font-bold uppercase text-gray-400 block mb-2">Quick Inspiration:</span>
+                    <div class="flex flex-wrap gap-2">
+                        <button type="button" onclick="fillExample('barbershop')" class="px-3 py-1.5 rounded-xl bg-sage-100 hover:bg-sage-200 text-forest-900 text-xs font-medium transition">
+                            💈 Barbershop
+                        </button>
+                        <button type="button" onclick="fillExample('tutoring')" class="px-3 py-1.5 rounded-xl bg-sage-100 hover:bg-sage-200 text-forest-900 text-xs font-medium transition">
+                            📚 Tutoring Academy
+                        </button>
+                        <button type="button" onclick="fillExample('detailing')" class="px-3 py-1.5 rounded-xl bg-sage-100 hover:bg-sage-200 text-forest-900 text-xs font-medium transition">
+                            🚗 Auto Detailing
+                        </button>
+                        <button type="button" onclick="fillExample('photography')" class="px-3 py-1.5 rounded-xl bg-sage-100 hover:bg-sage-200 text-forest-900 text-xs font-medium transition">
+                            📸 Photography Studio
+                        </button>
+                        <button type="button" onclick="fillExample('spa')" class="px-3 py-1.5 rounded-xl bg-sage-100 hover:bg-sage-200 text-forest-900 text-xs font-medium transition">
+                            💆 Massage & Wellness
+                        </button>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Submit Step 1 Button -->
+            <div class="pt-4 border-t border-sage-100">
+                <button type="button" id="understand-btn" onclick="submitBusinessDescription()"
+                        class="w-full py-4 rounded-2xl bg-forest-900 text-white font-semibold hover:bg-forest-800 transition shadow-lg shadow-forest-900/10 text-sm flex items-center justify-center gap-2">
+                    <span id="understand-btn-text">Analyze with AI & Build Intake Form</span>
+                    <span id="understand-spinner" class="hidden">⏳ Processing with openai/gpt-oss-120b...</span>
+                    <span>→</span>
+                </button>
+            </div>
+
+        </div>
+
+        <!-- STEP 2: CONVERSATIONAL FOLLOW-UP (Dynamic) -->
+        <div id="step-followup" class="hidden bg-white p-8 md:p-10 rounded-[36px] border border-sage-200/80 shadow-2xl shadow-forest-900/5 space-y-6">
+            <div class="flex items-center gap-3">
+                <div class="w-10 h-10 rounded-xl bg-amber-100 text-amber-800 flex items-center justify-center text-lg font-bold">
+                    💬
+                </div>
+                <div>
+                    <h2 class="text-xl font-bold text-forest-900">A couple quick follow-up details:</h2>
+                    <p class="text-xs text-gray-500">The AI understood your business! To make your intake questions perfect, answer these optional questions or skip directly.</p>
+                </div>
+            </div>
+
+            <!-- Dynamic Question Cards -->
+            <div id="followup-questions-list" class="space-y-4"></div>
+
+            <div class="flex items-center justify-between pt-4 border-t border-sage-100 gap-4">
+                <button type="button" onclick="generateQuestionsFinal(true)" 
+                        class="px-5 py-3 rounded-xl border border-sage-200 text-gray-600 hover:bg-sage-50 text-xs font-semibold transition">
+                    Skip Optional Questions
+                </button>
+                <button type="button" id="followup-submit-btn" onclick="generateQuestionsFinal(false)"
+                        class="px-6 py-3 rounded-xl bg-forest-900 text-white text-xs font-semibold hover:bg-forest-800 transition shadow-md flex items-center gap-2">
+                    <span>Generate Intake Questions</span> <span>→</span>
+                </button>
+            </div>
+        </div>
+
+        <!-- STEP 3: LOADING OVERLAY -->
+        <div id="step-loading" class="hidden text-center py-16 space-y-4">
+            <div class="inline-block w-12 h-12 border-4 border-forest-900 border-t-transparent rounded-full animate-spin"></div>
+            <h3 class="text-xl font-serif text-forest-900">Crafting your custom intake questionnaire...</h3>
+            <p class="text-xs text-gray-500 max-w-md mx-auto">
+                Groq AI is analyzing your services and formulating personalized customer intake questions with smart conditional logic.
+            </p>
+        </div>
+
+    </main>
+
+    <!-- Footer -->
+    <footer class="bg-cream border-t border-sage-200 py-6 mt-12">
+        <div class="max-w-7xl mx-auto px-6 flex items-center justify-between text-xs text-gray-500">
+            <p>&copy; 2026 Steadfast Multi-Tenant Platform. All rights reserved.</p>
+            <span class="text-gray-400">Model: openai/gpt-oss-120b</span>
+        </div>
+    </footer>
+
+    <!-- CLIENT SCRIPT -->
+    <script>
+        let currentMode = 'voice';
+        let mediaRecorder = null;
+        let audioChunks = [];
+        let recordingInterval = null;
+        let recordingSeconds = 0;
+        let currentExtractedProfile = null;
+
+        const EXAMPLES = {
+            barbershop: "I run a barbershop called Apex Cuts. We do regular haircuts, beard trims, fades, and hair coloring. Sometimes customers want a specific barber, and for hair coloring we need to know their current hair color and what color they want. Haircuts usually take around 30 minutes, but coloring can take two hours.",
+            tutoring: "I own a tutoring company called BrightPath Tutoring. We tutor students in math, science, and English. We need to know what grade the student is in, what subject they need help with, what specific topics they find challenging, and whether they are preparing for a test or need weekly homework help.",
+            detailing: "I run an auto detailing shop called Elite Shine. We offer full interior details, exterior wash & ceramic wax, and complete packages. We need to know the customer's vehicle make and model, vehicle type (sedan, SUV, truck), condition of the vehicle, and if there are pet hair or tough stains requiring extra attention.",
+            photography: "I operate a portrait and event photography studio called Lumina Studio. We do family portraits, headshots, and engagement shoots. We need to know how many people will participate, whether they prefer studio or outdoor location, what visual style they want, and any props they plan to bring.",
+            spa: "I run a holistic wellness spa called Harmony Sanctuary. We offer deep tissue massage, Swedish massage, hot stone therapy, and aromatherapy facials. We must know about any muscle injuries, allergies to oils, preferred pressure level, and specific areas of tension."
+        };
+
+        function switchInputMode(mode) {
+            currentMode = mode;
+            const tabVoice = document.getElementById('tab-voice');
+            const tabText = document.getElementById('tab-text');
+            const voiceBox = document.getElementById('voice-container');
+            const textBox = document.getElementById('text-container');
+
+            if (mode === 'voice') {
+                tabVoice.className = 'flex-1 py-2.5 text-xs font-semibold rounded-xl bg-forest-900 text-white transition flex items-center justify-center gap-2 shadow-sm';
+                tabText.className = 'flex-1 py-2.5 text-xs font-semibold rounded-xl text-gray-600 hover:text-forest-900 transition flex items-center justify-center gap-2';
+                voiceBox.classList.remove('hidden');
+                textBox.classList.add('hidden');
+            } else {
+                tabText.className = 'flex-1 py-2.5 text-xs font-semibold rounded-xl bg-forest-900 text-white transition flex items-center justify-center gap-2 shadow-sm';
+                tabVoice.className = 'flex-1 py-2.5 text-xs font-semibold rounded-xl text-gray-600 hover:text-forest-900 transition flex items-center justify-center gap-2';
+                textBox.classList.remove('hidden');
+                voiceBox.classList.add('hidden');
+            }
+        }
+
+        function fillExample(key) {
+            switchInputMode('text');
+            const textarea = document.getElementById('business-description-input');
+            textarea.value = EXAMPLES[key] || '';
+            textarea.focus();
+        }
+
+        function showAlert(msg, isError = false) {
+            const el = document.getElementById('status-alert');
+            el.className = `mb-6 p-4 rounded-2xl text-xs font-medium border ${isError ? 'bg-red-50 text-red-700 border-red-200' : 'bg-emerald-50 text-emerald-800 border-emerald-200'}`;
+            el.innerText = msg;
+            el.classList.remove('hidden');
+            window.scrollTo({ top: 0, behavior: 'smooth' });
+        }
+
+        // Voice Recording Functions
+        async function toggleRecording() {
+            if (mediaRecorder && mediaRecorder.state === 'recording') {
+                stopRecording();
+            } else {
+                startRecording();
+            }
+        }
+
+        async function startRecording() {
+            if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+                showAlert("Voice recording is not supported in this browser. Please use the Text Input option.", true);
+                switchInputMode('text');
+                return;
+            }
+
+            try {
+                const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+                audioChunks = [];
+                mediaRecorder = new MediaRecorder(stream);
+
+                mediaRecorder.ondataavailable = (event) => {
+                    if (event.data.size > 0) audioChunks.push(event.data);
+                };
+
+                mediaRecorder.onstop = async () => {
+                    clearInterval(recordingInterval);
+                    const audioBlob = new Blob(audioChunks, { type: 'audio/webm' });
+                    await uploadAndTranscribe(audioBlob);
+                    stream.getTracks().forEach(track => track.stop());
+                };
+
+                mediaRecorder.start();
+
+                // UI updates for active recording
+                document.getElementById('mic-btn').classList.remove('bg-forest-900');
+                document.getElementById('mic-btn').classList.add('bg-red-600');
+                document.getElementById('mic-icon').innerText = '⏹';
+                document.getElementById('mic-pulse').classList.remove('opacity-0');
+                document.getElementById('mic-pulse').classList.add('pulse-recording');
+                document.getElementById('voice-status-text').innerText = "Recording... speak naturally about your business";
+                document.getElementById('voice-timer').classList.remove('hidden');
+                document.getElementById('voice-controls').classList.remove('hidden');
+
+                recordingSeconds = 0;
+                document.getElementById('voice-timer').innerText = "00:00";
+                recordingInterval = setInterval(() => {
+                    recordingSeconds++;
+                    const mins = String(Math.floor(recordingSeconds / 60)).padStart(2, '0');
+                    const secs = String(recordingSeconds % 60).padStart(2, '0');
+                    document.getElementById('voice-timer').innerText = `${mins}:${secs}`;
+                }, 1000);
+
+            } catch (err) {
+                console.error("Microphone access denied or error:", err);
+                showAlert("Microphone permission was denied or unavailable. Please enable microphone access or type your description in the Text tab.", true);
+            }
+        }
+
+        function stopRecording() {
+            if (mediaRecorder && mediaRecorder.state === 'recording') {
+                mediaRecorder.stop();
+                resetMicUI();
+                document.getElementById('voice-status-text').innerText = "Transcribing with Groq Speech-to-Text...";
+            }
+        }
+
+        function cancelRecording() {
+            if (mediaRecorder && mediaRecorder.state === 'recording') {
+                mediaRecorder.onstop = null;
+                mediaRecorder.stop();
+                if (mediaRecorder.stream) {
+                    mediaRecorder.stream.getTracks().forEach(t => t.stop());
+                }
+            }
+            clearInterval(recordingInterval);
+            resetMicUI();
+            audioChunks = [];
+            document.getElementById('voice-status-text').innerText = "Recording cancelled. Tap to start again.";
+        }
+
+        function retryRecording() {
+            document.getElementById('transcription-review').classList.add('hidden');
+            document.getElementById('voice-transcript-text').value = '';
+            document.getElementById('voice-status-text').innerText = "Tap microphone and speak naturally";
+        }
+
+        function resetMicUI() {
+            document.getElementById('mic-btn').classList.add('bg-forest-900');
+            document.getElementById('mic-btn').classList.remove('bg-red-600');
+            document.getElementById('mic-icon').innerText = '🎙️';
+            document.getElementById('mic-pulse').classList.add('opacity-0');
+            document.getElementById('mic-pulse').classList.remove('pulse-recording');
+            document.getElementById('voice-controls').classList.add('hidden');
+            document.getElementById('voice-timer').classList.add('hidden');
+        }
+
+        async function uploadAndTranscribe(blob) {
+            showAlert("Transcribing your audio using Groq Whisper...", false);
+            const formData = new FormData();
+            formData.append('audio', blob, 'recording.webm');
+
+            try {
+                const res = await fetch('/api/ai/transcribe', {
+                    method: 'POST',
+                    body: formData
+                });
+                const data = await res.json();
+                if (data.success && data.text) {
+                    document.getElementById('voice-transcript-text').value = data.text;
+                    document.getElementById('transcription-review').classList.remove('hidden');
+                    document.getElementById('voice-status-text').innerText = "Transcription complete! Review and make any adjustments below.";
+                    showAlert("Audio transcribed successfully. Review your text and proceed.", false);
+                } else {
+                    showAlert(data.error || "Audio transcription failed. You can type your description directly.", true);
+                    switchInputMode('text');
+                }
+            } catch (err) {
+                console.error("Transcription error:", err);
+                showAlert("Failed to connect to transcription service. Please use text input.", true);
+                switchInputMode('text');
+            }
+        }
+
+        async function submitBusinessDescription() {
+            let description = '';
+            if (currentMode === 'voice') {
+                description = document.getElementById('voice-transcript-text').value.trim();
+            } else {
+                description = document.getElementById('business-description-input').value.trim();
+            }
+
+            if (!description) {
+                showAlert("Please speak or write a description of your business first.", true);
+                return;
+            }
+
+            // Show loading state
+            document.getElementById('understand-btn').disabled = true;
+            document.getElementById('understand-btn-text').classList.add('hidden');
+            document.getElementById('understand-spinner').classList.remove('hidden');
+
+            try {
+                const res = await fetch('/api/ai/understand', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ description })
+                });
+                const result = await res.json();
+
+                if (!result.success) {
+                    showAlert(result.error || "Failed to analyze description. Please try again.", true);
+                    resetUnderstandBtn();
+                    return;
+                }
+
+                currentExtractedProfile = result.profile;
+
+                // Check for follow-up questions
+                if (result.follow_up_questions && result.follow_up_questions.length > 0) {
+                    renderFollowUpQuestions(result.follow_up_questions);
+                    document.getElementById('step-input').classList.add('hidden');
+                    document.getElementById('step-followup').classList.remove('hidden');
+                    resetUnderstandBtn();
+                } else {
+                    // Directly generate questions
+                    await generateQuestionsFinal(true);
+                }
+
+            } catch (err) {
+                console.error("AI understanding error:", err);
+                showAlert("Connection error while contacting AI service. Please try again.", true);
+                resetUnderstandBtn();
+            }
+        }
+
+        function resetUnderstandBtn() {
+            document.getElementById('understand-btn').disabled = false;
+            document.getElementById('understand-btn-text').classList.remove('hidden');
+            document.getElementById('understand-spinner').classList.add('hidden');
+        }
+
+        function renderFollowUpQuestions(questions) {
+            const container = document.getElementById('followup-questions-list');
+            container.innerHTML = '';
+            questions.forEach((q, idx) => {
+                const card = document.createElement('div');
+                card.className = 'p-4 rounded-2xl bg-sage-50/70 border border-sage-200/80 space-y-2';
+                card.innerHTML = `
+                    <label class="block text-xs font-bold text-forest-900">
+                        ${idx + 1}. ${q}
+                    </label>
+                    <input type="text" data-followup-idx="${idx}" data-followup-q="${encodeURIComponent(q)}"
+                           placeholder="Type your response or leave blank..."
+                           class="w-full px-4 py-2.5 rounded-xl border border-sage-200 text-xs focus:outline-none focus:border-forest-900 bg-white">
+                `;
+                container.appendChild(card);
+            });
+        }
+
+        async function generateQuestionsFinal(skipFollowUps = false) {
+            // Collect any follow-up responses
+            const followUpAnswers = [];
+            if (!skipFollowUps) {
+                const inputs = document.querySelectorAll('#followup-questions-list input');
+                inputs.forEach(input => {
+                    const ans = input.value.trim();
+                    if (ans) {
+                        followUpAnswers.push({
+                            question: decodeURIComponent(input.dataset.followupQ),
+                            answer: ans
+                        });
+                    }
+                });
+            }
+
+            // Transition to loading view
+            document.getElementById('step-input').classList.add('hidden');
+            document.getElementById('step-followup').classList.add('hidden');
+            document.getElementById('step-loading').classList.remove('hidden');
+            window.scrollTo({ top: 0, behavior: 'smooth' });
+
+            try {
+                const res = await fetch('/admin/intake/generate', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        profile: currentExtractedProfile,
+                        follow_up_answers: followUpAnswers
+                    })
+                });
+                const data = await res.json();
+                if (data.success) {
+                    window.location.href = '/admin/intake';
+                } else {
+                    showAlert(data.error || "Failed to generate intake questions.", true);
+                    document.getElementById('step-loading').classList.add('hidden');
+                    document.getElementById('step-input').classList.remove('hidden');
+                }
+            } catch (err) {
+                console.error("Generate questions error:", err);
+                showAlert("Error connecting to server. Please try again.", true);
+                document.getElementById('step-loading').classList.add('hidden');
+                document.getElementById('step-input').classList.remove('hidden');
+            }
+        }
+    </script>
+</body>
+</html>

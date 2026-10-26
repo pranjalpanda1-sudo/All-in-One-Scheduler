@@ -60,6 +60,9 @@
 
             <div class="flex items-center gap-4 text-xs">
                 {% if business %}
+                <a href="/admin/intake" class="hidden md:inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-emerald-800 hover:bg-emerald-700 transition text-emerald-100 font-semibold border border-emerald-700 shadow-sm">
+                    <span>✨</span> AI Intake Studio
+                </a>
                 <a href="/businesses/{{ business.id }}/book" target="_blank" class="hidden md:inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-forest-800 hover:bg-forest-700 transition text-sage-100 font-semibold border border-forest-700">
                     <span>↗</span> View Live Booking Page
                 </a>
@@ -94,8 +97,11 @@
                 </div>
 
                 {% if business %}
-                <div class="flex flex-wrap gap-2">
-                    <a href="/businesses/{{ business.id }}/book" target="_blank" class="px-5 py-2.5 rounded-xl bg-forest-900 text-white font-medium hover:bg-forest-800 transition text-xs flex items-center gap-2">
+                <div class="flex flex-wrap gap-2.5">
+                    <a href="/admin/intake" class="px-5 py-2.5 rounded-xl bg-forest-900 text-white font-medium hover:bg-forest-800 transition text-xs flex items-center gap-2 shadow-sm">
+                        <span>✨</span> Custom Intake Studio
+                    </a>
+                    <a href="/businesses/{{ business.id }}/book" target="_blank" class="px-4 py-2.5 rounded-xl border border-sage-300 bg-white hover:bg-sage-50 text-forest-900 font-medium transition text-xs flex items-center gap-2">
                         Preview Booking Form <span>↗</span>
                     </a>
                 </div>
@@ -116,9 +122,9 @@
                     <span class="text-[11px] text-gray-400 block">max users / slot</span>
                 </div>
                 <div class="bg-sage-50/70 p-4 rounded-2xl border border-sage-200/60">
-                    <span class="text-[10px] uppercase font-bold text-gray-500 block">Active Staff</span>
-                    <strong class="text-forest-900 text-xl font-bold">{{ employees | length }}</strong>
-                    <span class="text-[11px] text-gray-400 block">registered employees</span>
+                    <span class="text-[10px] uppercase font-bold text-gray-500 block">Intake Questions</span>
+                    <strong class="text-forest-900 text-xl font-bold">{{ published_questions_count | default(0) }}</strong>
+                    <span class="text-[11px] text-gray-400 block">published questions</span>
                 </div>
                 <div class="bg-sage-50/70 p-4 rounded-2xl border border-sage-200/60">
                     <span class="text-[10px] uppercase font-bold text-gray-500 block">Total Bookings</span>
@@ -142,18 +148,22 @@
         {% endwith %}
 
         <!-- Tab Controls -->
-        <div class="flex rounded-2xl bg-white p-1.5 mb-8 border border-sage-200/80 shadow-sm max-w-md">
+        <div class="flex rounded-2xl bg-white p-1.5 mb-8 border border-sage-200/80 shadow-sm max-w-xl">
             <button type="button" id="tab-btn-bookings" onclick="switchDashboardTab('bookings')" 
                     class="flex-1 py-2.5 text-xs font-semibold rounded-xl bg-forest-900 text-white transition">
                 📅 Appointments ({{ bookings | length }})
             </button>
+            <button type="button" id="tab-btn-intake" onclick="switchDashboardTab('intake')" 
+                    class="flex-1 py-2.5 text-xs font-semibold rounded-xl text-gray-600 hover:text-forest-900 transition flex items-center justify-center gap-1">
+                <span>🤖</span> AI Intake
+            </button>
             <button type="button" id="tab-btn-staff" onclick="switchDashboardTab('staff')" 
                     class="flex-1 py-2.5 text-xs font-semibold rounded-xl text-gray-600 hover:text-forest-900 transition">
-                👥 Staff & Team ({{ employees | length }})
+                👥 Staff ({{ employees | length }})
             </button>
             <button type="button" id="tab-btn-settings" onclick="switchDashboardTab('settings')" 
                     class="flex-1 py-2.5 text-xs font-semibold rounded-xl text-gray-600 hover:text-forest-900 transition">
-                ⚙️ Settings & Intervals
+                ⚙️ Settings
             </button>
         </div>
 
@@ -163,7 +173,7 @@
                 <div class="flex items-center justify-between mb-6">
                     <div>
                         <h2 class="text-xl font-bold text-forest-900">Booked Appointment Slots</h2>
-                        <p class="text-xs text-gray-500">Live feed of all customer bookings with staff assignments</p>
+                        <p class="text-xs text-gray-500">Live feed of all customer bookings, services, staff assignments, and AI summaries</p>
                     </div>
                 </div>
 
@@ -174,25 +184,35 @@
                             <tr class="border-b border-sage-200/80 text-gray-400 font-semibold uppercase tracking-wider">
                                 <th class="pb-3 px-3">Date & Time</th>
                                 <th class="pb-3 px-3">Customer</th>
+                                <th class="pb-3 px-3">Service</th>
                                 <th class="pb-3 px-3">Assigned Staff</th>
                                 <th class="pb-3 px-3">Status</th>
-                                <th class="pb-3 px-3">Notes</th>
+                                <th class="pb-3 px-3">AI Summary</th>
                                 <th class="pb-3 px-3 text-right">Action</th>
                             </tr>
                         </thead>
                         <tbody class="divide-y divide-sage-100">
                             {% for b in bookings %}
                             <tr class="hover:bg-sage-50/50 transition">
-                                <td class="py-4 px-3 font-semibold text-forest-900">
+                                <td class="py-4 px-3 font-semibold text-forest-900 whitespace-nowrap">
                                     {{ b.start_time | replace('T', ' ') | truncate(16, true, '') }}
                                 </td>
                                 <td class="py-4 px-3">
                                     <div class="font-medium text-forest-900">{{ b.customer_name or 'Customer' }}</div>
                                     <div class="text-[11px] text-gray-500">{{ b.customer_email }}</div>
                                 </td>
-                                <td class="py-4 px-3">
-                                    <span class="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-sage-100 text-forest-900 font-medium text-[11px]">
-                                        👤 {{ b.employee_name or 'Assigned Staff' }}
+                                <td class="py-4 px-3 font-semibold text-forest-900 whitespace-nowrap">
+                                    {% if b.intake_data and b.intake_data.service_selected %}
+                                    <span class="px-2 py-0.5 rounded-lg bg-sage-100 text-forest-900 text-[11px]">
+                                        {{ b.intake_data.service_selected }}
+                                    </span>
+                                    {% else %}
+                                    <span class="text-gray-400 text-[11px]">General</span>
+                                    {% endif %}
+                                </td>
+                                <td class="py-4 px-3 whitespace-nowrap">
+                                    <span class="inline-flex items-center gap-1 px-2.5 py-1 rounded-full bg-sage-100 text-forest-900 font-medium text-[11px]">
+                                        👤 {{ b.employee_name or 'Staff' }}
                                     </span>
                                 </td>
                                 <td class="py-4 px-3">
@@ -206,10 +226,22 @@
                                     </span>
                                     {% endif %}
                                 </td>
-                                <td class="py-4 px-3 text-gray-500 max-w-xs truncate">
-                                    {{ b.notes or '—' }}
+                                <td class="py-4 px-3 whitespace-nowrap">
+                                    {% if b.ai_summary and b.ai_summary.summary %}
+                                    <button type="button" onclick="showBookingDetail('{{ b.id }}')" 
+                                            class="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-emerald-50 hover:bg-emerald-100 text-emerald-800 border border-emerald-200 font-bold text-[11px] transition shadow-sm">
+                                        <span>✨</span> View Summary
+                                    </button>
+                                    {% elif b.intake_data and b.intake_data.responses %}
+                                    <button type="button" onclick="showBookingDetail('{{ b.id }}')"
+                                            class="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-sage-100 hover:bg-sage-200 text-forest-900 font-semibold text-[11px] transition">
+                                        <span>📋</span> View Answers
+                                    </button>
+                                    {% else %}
+                                    <span class="text-gray-400 text-[11px] italic">{{ b.notes | truncate(25, true, '...') if b.notes else '—' }}</span>
+                                    {% endif %}
                                 </td>
-                                <td class="py-4 px-3 text-right">
+                                <td class="py-4 px-3 text-right whitespace-nowrap">
                                     {% if b.status == 'CONFIRMED' %}
                                     <form method="POST" action="/admin/bookings/{{ b.id }}/cancel" onsubmit="return confirm('Are you sure you want to cancel this booking?')" class="inline">
                                         <button type="submit" class="px-3 py-1 rounded-lg border border-red-200 text-red-600 hover:bg-red-50 font-semibold text-[11px] transition">
@@ -228,13 +260,84 @@
                 {% else %}
                 <div class="p-10 text-center bg-sage-50/50 rounded-2xl border border-sage-200 text-xs text-gray-500">
                     <p class="font-semibold text-forest-900 mb-1">No bookings yet</p>
-                    <p>When customers schedule appointments, they will appear here in real-time.</p>
+                    <p>When customers schedule appointments, they will appear here in real-time with AI summaries.</p>
                 </div>
                 {% endif %}
             </div>
         </div>
 
-        <!-- SECTION 2: STAFF & TEAM MANAGEMENT -->
+        <!-- SECTION 2: AI INTAKE FORM OVERVIEW -->
+        <div id="section-intake" class="hidden space-y-6">
+            <div class="bg-white p-8 md:p-10 rounded-[32px] border border-sage-200/80 shadow-xl shadow-forest-900/5 space-y-8">
+                <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-6 border-b border-sage-100">
+                    <div>
+                        <div class="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-emerald-100 text-emerald-800 text-[10px] font-bold uppercase tracking-wider mb-2">
+                            <span>🤖</span> Multi-Tenant AI Intake System
+                        </div>
+                        <h2 class="text-2xl font-serif text-forest-900">Custom Intake Configuration</h2>
+                        <p class="text-xs text-gray-500 mt-0.5">
+                            Each business has its own independently configured questionnaire powered by Groq (openai/gpt-oss-120b).
+                        </p>
+                    </div>
+
+                    <div class="flex items-center gap-2.5">
+                        <a href="/onboarding" class="px-4 py-2.5 rounded-xl border border-sage-300 hover:border-forest-900 text-forest-900 text-xs font-semibold bg-white transition flex items-center gap-1.5 shadow-sm">
+                            <span>🎙️</span> Re-run AI Onboarding
+                        </a>
+                        <a href="/admin/intake" class="px-5 py-2.5 rounded-xl bg-forest-900 text-white text-xs font-semibold hover:bg-forest-800 transition shadow-md flex items-center gap-1.5">
+                            <span>✨</span> Open Intake Studio
+                        </a>
+                    </div>
+                </div>
+
+                <!-- Intake Status Metrics -->
+                <div class="grid grid-cols-1 sm:grid-cols-3 gap-4">
+                    <div class="p-5 rounded-2xl bg-sage-50/70 border border-sage-200/80">
+                        <span class="text-[10px] font-bold uppercase text-gray-500 block">Published Version</span>
+                        <strong class="text-xl font-bold text-forest-900">
+                            {{ 'v' ~ published_form.version if published_form else 'Not Published Yet' }}
+                        </strong>
+                        <span class="text-[11px] text-gray-400 block mt-1">
+                            {{ published_questions_count | default(0) }} active customer questions
+                        </span>
+                    </div>
+
+                    <div class="p-5 rounded-2xl bg-sage-50/70 border border-sage-200/80">
+                        <span class="text-[10px] font-bold uppercase text-gray-500 block">Draft Changes</span>
+                        <strong class="text-xl font-bold text-forest-900">
+                            {{ 'Pending Approval' if (draft_form and draft_form.status == 'DRAFT') else 'In Sync with Live' }}
+                        </strong>
+                        <span class="text-[11px] text-gray-400 block mt-1">
+                            {{ draft_questions_count | default(0) }} questions in draft editor
+                        </span>
+                    </div>
+
+                    <div class="p-5 rounded-2xl bg-sage-50/70 border border-sage-200/80">
+                        <span class="text-[10px] font-bold uppercase text-gray-500 block">AI Inference Engine</span>
+                        <strong class="text-sm font-bold text-forest-900">openai/gpt-oss-120b</strong>
+                        <span class="text-[11px] text-emerald-700 font-semibold block mt-1">
+                            Groq API Connected & Verified
+                        </span>
+                    </div>
+                </div>
+
+                <!-- Callout Action Card -->
+                <div class="p-6 rounded-2xl bg-forest-900 text-white flex flex-col md:flex-row items-start md:items-center justify-between gap-4">
+                    <div>
+                        <h3 class="text-base font-bold">Customize, Edit, or Add Conditional Questions</h3>
+                        <p class="text-xs text-sage-200 max-w-xl mt-1">
+                            Use the Intake Studio to edit question wording, set single choice, dropdown, or yes/no types, reorder items, test dynamic conditional logic, and publish updates with 1-click.
+                        </p>
+                    </div>
+                    <a href="/admin/intake" class="px-5 py-2.5 rounded-xl bg-amber-300 hover:bg-amber-400 text-forest-900 font-bold text-xs transition shadow-sm whitespace-nowrap">
+                        Open Intake Studio →
+                    </a>
+                </div>
+
+            </div>
+        </div>
+
+        <!-- SECTION 3: STAFF & TEAM MANAGEMENT -->
         <div id="section-staff" class="hidden space-y-6">
             <div class="grid grid-cols-1 lg:grid-cols-3 gap-8">
                 
@@ -304,7 +407,7 @@
             </div>
         </div>
 
-        <!-- SECTION 3: BUSINESS SETTINGS & INTERVALS -->
+        <!-- SECTION 4: BUSINESS SETTINGS & INTERVALS -->
         <div id="section-settings" class="hidden space-y-6">
             <div class="bg-white p-8 md:p-10 rounded-[32px] border border-sage-200/80 shadow-xl shadow-forest-900/5 max-w-3xl">
                 <h3 class="text-xl font-bold text-forest-900 mb-1">Business Settings & Slot Configuration</h3>
@@ -434,6 +537,65 @@
 
     </main>
 
+    <!-- MODAL: APPOINTMENT DETAIL & AI SUMMARY -->
+    <div id="booking-modal" class="fixed inset-0 z-50 bg-black/50 backdrop-blur-sm flex items-center justify-center p-4 hidden">
+        <div class="bg-white rounded-[32px] max-w-2xl w-full max-h-[90vh] overflow-y-auto p-8 shadow-2xl border border-sage-200 space-y-6">
+            <div class="flex items-center justify-between pb-4 border-b border-sage-100">
+                <div>
+                    <span class="text-[10px] uppercase font-bold text-sage-700 block" id="modal-service-badge">Appointment Details</span>
+                    <h3 class="text-2xl font-serif text-forest-900" id="modal-cust-name">Customer Name</h3>
+                    <p class="text-xs text-gray-500" id="modal-subheading">Date & Time</p>
+                </div>
+                <button type="button" onclick="closeBookingDetailModal()" class="w-8 h-8 rounded-full bg-sage-100 hover:bg-sage-200 text-forest-900 flex items-center justify-center font-bold text-sm">
+                    ✕
+                </button>
+            </div>
+
+            <!-- PROMINENT AI SUMMARY CARD -->
+            <div class="p-5 rounded-2xl bg-gradient-to-br from-emerald-50 via-sage-50 to-white border border-emerald-200 space-y-3 shadow-sm">
+                <div class="flex items-center justify-between">
+                    <span class="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full bg-emerald-100 text-emerald-800 text-[10px] font-bold uppercase tracking-wider">
+                        <span>✨</span> AI-Generated Appointment Summary
+                    </span>
+                    <span class="text-[10px] text-gray-400 font-mono">openai/gpt-oss-120b</span>
+                </div>
+                <p class="text-sm font-medium text-forest-900 leading-relaxed" id="modal-ai-summary-text">
+                    Loading summary...
+                </p>
+                <div id="modal-prep-notes-container" class="pt-2 border-t border-emerald-100 text-xs hidden">
+                    <strong class="text-emerald-900 block font-semibold mb-0.5">📋 Preparation Notes:</strong>
+                    <span class="text-emerald-800" id="modal-prep-notes-text"></span>
+                </div>
+            </div>
+
+            <!-- FULL ORIGINAL INTAKE RESPONSES (Expandable Accordion) -->
+            <div class="space-y-3">
+                <div class="flex items-center justify-between">
+                    <h4 class="text-xs font-bold uppercase text-forest-900 tracking-wider">
+                        Original Customer Intake Responses
+                    </h4>
+                    <span class="text-[11px] text-gray-400" id="modal-responses-count">0 answered</span>
+                </div>
+
+                <div id="modal-responses-list" class="space-y-2.5 max-h-60 overflow-y-auto pr-1">
+                    <!-- Populated dynamically -->
+                </div>
+            </div>
+
+            <!-- Freeform Notes -->
+            <div id="modal-customer-notes-container" class="p-4 rounded-xl bg-sage-50/60 border border-sage-200 text-xs text-gray-700 hidden">
+                <strong class="text-forest-900 block font-semibold mb-0.5">Customer Additional Notes:</strong>
+                <p id="modal-customer-notes-text"></p>
+            </div>
+
+            <div class="pt-4 border-t border-sage-100 flex justify-end">
+                <button type="button" onclick="closeBookingDetailModal()" class="px-5 py-2.5 rounded-xl bg-forest-900 text-white text-xs font-semibold hover:bg-forest-800 transition">
+                    Done
+                </button>
+            </div>
+        </div>
+    </div>
+
     <!-- Footer -->
     <footer class="bg-cream border-t border-sage-200 py-8">
         <div class="max-w-7xl mx-auto px-6 flex items-center justify-between text-sm text-gray-500">
@@ -443,19 +605,85 @@
     </footer>
 
     <script>
+        const bookingsData = {{ bookings | tojson | safe }};
+
         function switchDashboardTab(tab) {
-            const tabs = ['bookings', 'staff', 'settings'];
+            const tabs = ['bookings', 'intake', 'staff', 'settings'];
             tabs.forEach(t => {
                 const sec = document.getElementById('section-' + t);
                 const btn = document.getElementById('tab-btn-' + t);
+                if (!sec || !btn) return;
                 if (t === tab) {
                     sec.classList.remove('hidden');
-                    btn.className = 'flex-1 py-2.5 text-xs font-semibold rounded-xl bg-forest-900 text-white transition';
+                    btn.className = 'flex-1 py-2.5 text-xs font-semibold rounded-xl bg-forest-900 text-white transition flex items-center justify-center gap-1';
                 } else {
                     sec.classList.add('hidden');
-                    btn.className = 'flex-1 py-2.5 text-xs font-semibold rounded-xl text-gray-600 hover:text-forest-900 transition';
+                    btn.className = 'flex-1 py-2.5 text-xs font-semibold rounded-xl text-gray-600 hover:text-forest-900 transition flex items-center justify-center gap-1';
                 }
             });
+        }
+
+        function showBookingDetail(bookingId) {
+            const booking = bookingsData.find(b => String(b.id) === String(bookingId));
+            if (!booking) return;
+
+            document.getElementById('modal-cust-name').innerText = booking.customer_name || 'Customer';
+            document.getElementById('modal-subheading').innerText = `${booking.start_time.replace('T', ' ').substring(0, 16)} • Staff: ${booking.employee_name || 'Assigned Staff'}`;
+            
+            const serviceName = (booking.intake_data && booking.intake_data.service_selected) ? booking.intake_data.service_selected : 'General Appointment';
+            document.getElementById('modal-service-badge').innerText = `Service: ${serviceName}`;
+
+            // AI Summary
+            const summary = (booking.ai_summary && booking.ai_summary.summary) 
+                            ? booking.ai_summary.summary 
+                            : (booking.notes ? `Customer notes: "${booking.notes}"` : 'No special requests or intake details provided.');
+            document.getElementById('modal-ai-summary-text').innerText = summary;
+
+            // Prep Notes
+            const prepNotes = booking.ai_summary ? booking.ai_summary.preparation_notes : null;
+            const prepContainer = document.getElementById('modal-prep-notes-container');
+            if (prepNotes) {
+                document.getElementById('modal-prep-notes-text').innerText = prepNotes;
+                prepContainer.classList.remove('hidden');
+            } else {
+                prepContainer.classList.add('hidden');
+            }
+
+            // Customer Intake Responses
+            const responsesContainer = document.getElementById('modal-responses-list');
+            responsesContainer.innerHTML = '';
+            const responses = (booking.intake_data && Array.isArray(booking.intake_data.responses)) ? booking.intake_data.responses : [];
+            document.getElementById('modal-responses-count').innerText = `${responses.length} answered`;
+
+            if (responses.length === 0) {
+                responsesContainer.innerHTML = `<div class="p-4 rounded-xl bg-sage-50 text-xs text-gray-500 italic">No custom intake questions were answered for this appointment.</div>`;
+            } else {
+                responses.forEach(r => {
+                    const row = document.createElement('div');
+                    row.className = 'p-3 rounded-xl bg-sage-50/70 border border-sage-200/70 text-xs space-y-1';
+                    const answerDisplay = Array.isArray(r.answer) ? r.answer.join(', ') : (r.answer || '—');
+                    row.innerHTML = `
+                        <span class="font-bold text-forest-900 block">${r.question_text || 'Question'}</span>
+                        <span class="text-gray-700 bg-white px-2 py-1 rounded-lg border border-sage-200 inline-block font-medium">${answerDisplay}</span>
+                    `;
+                    responsesContainer.appendChild(row);
+                });
+            }
+
+            // Customer Notes
+            const notesContainer = document.getElementById('modal-customer-notes-container');
+            if (booking.notes) {
+                document.getElementById('modal-customer-notes-text').innerText = booking.notes;
+                notesContainer.classList.remove('hidden');
+            } else {
+                notesContainer.classList.add('hidden');
+            }
+
+            document.getElementById('booking-modal').classList.remove('hidden');
+        }
+
+        function closeBookingDetailModal() {
+            document.getElementById('booking-modal').classList.add('hidden');
         }
     </script>
 </body>
