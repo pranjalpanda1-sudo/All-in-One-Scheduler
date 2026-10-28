@@ -1757,6 +1757,11 @@ def get_ai_appointment_summary(booking_id: str) -> dict:
 # ====================================================================
 # FLASK APPLICATION ROUTES
 # ====================================================================
+@app.route('/google<string:token>.html')
+def google_verification(token):
+    """Handles Google Search Console HTML file verification."""
+    return f"google-site-verification: google{token}.html", 200, {'Content-Type': 'text/html'}
+
 @app.route('/')
 def index():
     """Renders the public landing page."""
